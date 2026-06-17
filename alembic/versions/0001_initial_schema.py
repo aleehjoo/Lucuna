@@ -169,9 +169,25 @@ drop table if exists analysis_runs, unmapped_labels, taxonomy_crosswalk, scores,
 """
 
 
+def _split(sql: str) -> list[str]:
+    # This DDL has no dollar-quoted bodies, so splitting on ';' is safe.
+    return [s.strip() for s in sql.split(";") if s.strip()]
+
+
 def upgrade() -> None:
-    op.execute(DDL)
+    # asyncpg uses the extended (prepared-statement) protocol, which rejects
+    # multiple commands per execute — so run each statement individually.
+    conn = op.get_bind()
+    has_vector = conn.exec_driver_sql(
+        "select count(*) from pg_extension where extname='vector'").scalar()
+    for stmt in _split(DDL):
+        # pgvector may already be enabled by an admin/dashboard and the app role
+        # may lack CREATE EXTENSION; skip the no-op in that case.
+        if stmt.lower().startswith("create extension") and has_vector:
+            continue
+        op.execute(stmt)
 
 
 def downgrade() -> None:
-    op.execute(DROP)
+    for stmt in _split(DROP):
+        op.execute(stmt)

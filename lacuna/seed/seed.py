@@ -94,9 +94,18 @@ def run_seed(rebuild: bool = True, reconcile: bool = False, *,
         DEFAULT_META_LIMIT, DEFAULT_REVIEW_LIMIT, build_seed_plan,
     )
 
+    import sys
+    import time
+
     cfg = load_default()
     adv = load_advanced()
     subject_keywords = (cfg.get("subject_filter") or {}).get("keywords") or []
+
+    _t0 = time.monotonic()
+
+    def _progress(msg: str) -> None:
+        print(f"[seed +{time.monotonic() - _t0:6.0f}s] {msg}", flush=True)
+        sys.stdout.flush()
 
     plan = build_seed_plan(
         corpus.iter_meta(),
@@ -111,7 +120,9 @@ def run_seed(rebuild: bool = True, reconcile: bool = False, *,
         max_works=max_works if max_works is not None else 60,
         meta_limit=meta_limit if meta_limit is not None else DEFAULT_META_LIMIT,
         review_limit=review_limit if review_limit is not None else DEFAULT_REVIEW_LIMIT,
+        on_progress=_progress,
     )
+    _progress(f"plan built: {plan.counts}")
 
     sm = build_sessionmaker()
 

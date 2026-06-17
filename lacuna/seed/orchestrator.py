@@ -118,6 +118,7 @@ def build_seed_plan(
     meta_limit: int = DEFAULT_META_LIMIT,
     review_limit: int = DEFAULT_REVIEW_LIMIT,
     cluster_min_size: int = 2,
+    on_progress=None,
 ) -> SeedPlan:
     """Stream meta → editions → works, stream matched reviews, select works with a
     long-tail floor, then embed/cluster/label each selected work's critical reviews.
@@ -127,6 +128,8 @@ def build_seed_plan(
     -> ndarray`; `labeler.label_cluster(list[str]) -> AspectResult(label, score,
     representative)`.
     """
+    _p = on_progress or (lambda _m: None)
+
     # ---- Pass 1: subject-matched meta -> editions keyed by parent_asin ----
     edition_inputs: list[EditionInput] = []
     edition_records: dict[str, object] = {}  # parent_asin -> EditionRecord
@@ -135,6 +138,8 @@ def build_seed_plan(
         meta_scanned += 1
         if meta_scanned > meta_limit:
             break
+        if meta_scanned % 25_000 == 0:
+            _p(f"meta scanned {meta_scanned:,} / {meta_limit:,} · subject editions {len(edition_inputs):,}")
         if not _subject_match(meta, subject_keywords):
             continue
         pa = meta.get("parent_asin")
@@ -145,6 +150,8 @@ def build_seed_plan(
         edition_inputs.append(to_edition_input(rec))
 
     groups = group_editions(edition_inputs, trigram_threshold=trigram_threshold)
+    _p(f"pass1 done: {len(edition_inputs):,} subject editions → {len(groups):,} works "
+       f"(scanned {meta_scanned:,} meta rows)")
     # parent_asin -> work normalized_key
     work_key_by_parent: dict[str, str] = {}
     for g in groups:
@@ -152,21 +159,29 @@ def build_seed_plan(
         for m in g.members:
             work_key_by_parent[m.asin] = wkey
     matched_parents = set(work_key_by_parent)
+    _p(f"matching reviews against {len(matched_parents):,} subject parent_asins…")
 
     # ---- Pass 2: stream reviews, keep those for matched parents ----
     reviews_by_work: dict[str, list[object]] = {}
     ratings_by_work: dict[str, list[float]] = {}
     review_scanned = 0
+    matched_reviews = 0
     for rv in review_source:
         review_scanned += 1
         if review_scanned > review_limit:
             break
+        if review_scanned % 200_000 == 0:
+            _p(f"reviews scanned {review_scanned:,} / {review_limit:,} · "
+               f"matched {matched_reviews:,} across {len(reviews_by_work):,} works")
         pa = getattr(rv, "parent_asin", None) or getattr(rv, "asin", None)
         if pa not in matched_parents:
             continue
+        matched_reviews += 1
         wkey = work_key_by_parent[pa]
         reviews_by_work.setdefault(wkey, []).append(rv)
         ratings_by_work.setdefault(wkey, []).append(float(getattr(rv, "rating", 0) or 0))
+    _p(f"pass2 done: {matched_reviews:,} matched reviews across {len(reviews_by_work):,} works "
+       f"(scanned {review_scanned:,} review rows)")
 
     # ---- Select works with a long-tail floor ----
     work_dicts = [
@@ -177,6 +192,8 @@ def build_seed_plan(
         longtail_share=longtail_share, low_threshold=min_sample_gate,
     )
     selected_keys = [w["key"] for w in selected]
+    _p(f"selected {len(selected_keys):,} works (long-tail floor) from {len(work_dicts):,} candidates; "
+       f"embedding/clustering now…")
 
     plan = SeedPlan()
     # work -> the group (for title/author/editions)
@@ -184,10 +201,12 @@ def build_seed_plan(
     for g in groups:
         group_by_key[normalized_key(g.title, g.author)] = g
 
-    for wkey in selected_keys:
+    for wi, wkey in enumerate(selected_keys, 1):
         g = group_by_key.get(wkey)
         if g is None:
             continue
+        _p(f"  work {wi}/{len(selected_keys)}: {(g.title or '')[:50]!r} "
+           f"({len(reviews_by_work.get(wkey, [])):,} reviews)")
         ratings = ratings_by_work.get(wkey, [])
         rating_avg = round(sum(ratings) / len(ratings), 2) if ratings else None
         plan.works.append(PlanWork(

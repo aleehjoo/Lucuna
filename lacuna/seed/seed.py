@@ -66,12 +66,69 @@ def to_edition_input(rec: EditionRecord) -> EditionInput:
                         title=rec.title, author=rec.author)
 
 
-def run_seed(rebuild: bool = False, reconcile: bool = False) -> None:  # pragma: no cover
-    """Integration entrypoint (deferred). Streams corpus -> editions -> works ->
-    critical review selection -> local embed/cluster/label (Workstream D) -> upsert
-    to Supabase -> analysis_runs(mode='seed'). Requires DATABASE_URL + pinned models."""
+def run_seed(rebuild: bool = True, reconcile: bool = False, *,
+             max_works: int | None = None, meta_limit: int | None = None,
+             review_limit: int | None = None) -> dict:  # pragma: no cover
+    """Integration entrypoint. Streams corpus -> editions -> works -> critical
+    review selection -> local embed/cluster/label (Workstream D) -> upsert to
+    Supabase -> analysis_runs(mode='seed'). Requires DATABASE_URL + pinned models.
+
+    Wiring only (the algorithm lives in lacuna.seed.orchestrator.build_seed_plan and
+    persistence in lacuna.db.repository); kept import-light so the CLI loads fast and
+    the heavy ML deps import lazily inside this call."""
     if reconcile:
         raise NotImplementedError(
             "--reconcile not implemented; use --rebuild for a full recompute (PRD §6.4)")
-    raise NotImplementedError(
-        "run_seed requires Supabase credentials and pinned models; run after `alembic upgrade head`")
+    if not rebuild:
+        raise NotImplementedError("only --rebuild (full recompute) is implemented (PRD §6.4)")
+
+    import asyncio
+
+    from lacuna.adapters import corpus
+    from lacuna.config import load_advanced, load_default
+    from lacuna.db.repository import persist_seed_plan, record_run
+    from lacuna.db.session import build_sessionmaker
+    from lacuna.nlp.aspects import AspectLabeler
+    from lacuna.nlp.embeddings import Embedder
+    from lacuna.seed.orchestrator import (
+        DEFAULT_META_LIMIT, DEFAULT_REVIEW_LIMIT, build_seed_plan,
+    )
+
+    cfg = load_default()
+    adv = load_advanced()
+    subject_keywords = (cfg.get("subject_filter") or {}).get("keywords") or []
+
+    plan = build_seed_plan(
+        corpus.iter_meta(),
+        corpus.iter_reviews(),
+        embedder=Embedder(),
+        labeler=AspectLabeler(),
+        subject_keywords=subject_keywords,
+        cap_per_work=int(adv.get("curated_reviews_per_work", 15)),
+        longtail_share=float(adv.get("longtail_share", 0.3)),
+        min_sample_gate=int(adv.get("min_sample_gate", 20)),
+        trigram_threshold=float(adv.get("works_trigram_threshold", 0.6)),
+        max_works=max_works if max_works is not None else 60,
+        meta_limit=meta_limit if meta_limit is not None else DEFAULT_META_LIMIT,
+        review_limit=review_limit if review_limit is not None else DEFAULT_REVIEW_LIMIT,
+    )
+
+    sm = build_sessionmaker()
+
+    async def _persist() -> dict:
+        counts = await persist_seed_plan(
+            sm, plan,
+            project_name=cfg.get("project_name", "Lacuna Seed"),
+            target_bisac=cfg.get("target_bisac", []),
+            subject_filter=cfg.get("subject_filter", {}),
+            config={"seed": {"max_works": max_works, "meta_limit": meta_limit,
+                             "review_limit": review_limit}},
+            rebuild=rebuild,
+        )
+        pid = counts.get("project_id")
+        await record_run(sm, mode="seed", target=cfg.get("project_name"),
+                         sources_used=["amazon_corpus"], status="ok",
+                         counts=counts, project_id=pid)
+        return counts
+
+    return asyncio.run(_persist())

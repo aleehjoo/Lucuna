@@ -48,5 +48,23 @@ def validate_hardcover_cmd() -> None:
     raise typer.Exit(code=1)
 
 
+@app.command("seed")
+def seed_cmd(
+    rebuild: bool = typer.Option(True, help="Full recompute (only supported mode)."),
+    max_works: int = typer.Option(60, help="Cap on works selected for the seed."),
+    meta_limit: int = typer.Option(200_000, help="Max corpus meta rows to scan."),
+    review_limit: int = typer.Option(1_000_000, help="Max corpus review rows to scan."),
+) -> None:
+    """Seed Supabase from the local corpus pipeline (PRD §6). Downloads pinned
+    models on first run; all NLP is local — no raw text leaves the machine."""
+    from lacuna.seed.seed import run_seed
+
+    typer.secho("Seeding from local corpus (this downloads pinned models on first run)…",
+                fg=typer.colors.CYAN)
+    counts = run_seed(rebuild=rebuild, max_works=max_works,
+                      meta_limit=meta_limit, review_limit=review_limit)
+    typer.secho(f"SEED OK — {counts}", fg=typer.colors.GREEN)
+
+
 if __name__ == "__main__":
     app()

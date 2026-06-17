@@ -18,6 +18,13 @@ data/
 *.parquet
 *.jsonl
 
+# Generated run artifacts (Context Packs, run logs)
+*.log
+pack.json
+pack.md
+sweep_pack.json
+sweep_pack.md
+
 # HF / model caches
 .cache/
 

@@ -271,30 +271,41 @@ git commit -m "feat: pydantic boundary schemas for all sources"
 - Test: `tests/adapters/test_hardcover.py`
 
 > The GraphQL endpoint is `https://api.hardcover.app/v1/graphql`; auth is `Authorization: Bearer <token>` where the stored token is the raw `eyJ…` (no `Bearer ` prefix). Limiter at 60/min.
+>
+> **API reality (confirmed live at build time, 2026-06-17):** Hardcover **blocks `_ilike`** ("ilike and related operations are not permitted on this server"), and there is **no `reviews` relationship on `books`**. So resolution is a two-call flow: (1) the Typesense-backed `search(query, query_type:"Book")` query maps a title to the canonical book id (the hit with the most `users_read_count` — bare-title `_eq` only matches empty edition stubs); (2) reviews come from the **`user_books`** table (`where: {book_id:{_eq:$id}, has_review:{_eq:true}}`), where review text is `review_raw` and the date is `reviewed_at`.
 
-- [ ] **Step 1: Write the failing test** (recorded GraphQL response replayed via respx)
+- [ ] **Step 1: Write the failing test** (recorded GraphQL responses replayed via respx; two calls — search then user_books)
 
 ```python
 # tests/adapters/test_hardcover.py
 import httpx, respx
 from lacuna.adapters.hardcover import HardcoverClient
 
-RECORDED = {
-  "data": {"books": [{
-      "id": 42, "title": "Meditations",
-      "reviews": [
-        {"id": 1, "rating": 2.0, "body": "translation is clunky", "user_id": 5, "created_at": "2025-01-02T00:00:00Z"},
-        {"id": 2, "rating": 5.0, "body": "great", "user_id": 6, "created_at": "2025-02-02T00:00:00Z"},
-      ],
-  }]}
+SEARCH = {
+  "data": {"search": {"results": {"hits": [
+      {"document": {"id": "490927", "title": "Atomic Habits", "users_read_count": 0}},
+      {"document": {"id": "42", "title": "Meditations", "users_read_count": 100}},
+  ]}}}
 }
+REVIEWS = {
+  "data": {"user_books": [
+      {"id": 1, "rating": 2.0, "review_raw": "translation is clunky", "reviewed_at": "2025-01-02T00:00:00Z", "user_id": 5},
+      {"id": 2, "rating": 5.0, "review_raw": "great", "reviewed_at": "2025-02-02T00:00:00Z", "user_id": 6},
+  ]}
+}
+
+def _router(request):
+    body = request.content.decode()
+    if "search" in body:
+        return httpx.Response(200, json=SEARCH)
+    return httpx.Response(200, json=REVIEWS)
 
 @respx.mock
 async def test_fetch_reviews_by_title_parses_recorded():
-    respx.post("https://api.hardcover.app/v1/graphql").mock(
-        return_value=httpx.Response(200, json=RECORDED))
+    respx.post("https://api.hardcover.app/v1/graphql").mock(side_effect=_router)
     client = HardcoverClient(token="eyJ-fake")
     book = await client.fetch_book_by_title("Meditations")
+    assert book.id == 42  # canonical hit (most readers), not the empty stub
     assert book.title == "Meditations"
     assert len(book.reviews) == 2
     assert book.reviews[0].body == "translation is clunky"
@@ -305,10 +316,11 @@ async def test_auth_header_has_no_double_bearer():
     captured = {}
     def _capture(request):
         captured["auth"] = request.headers.get("authorization")
-        return httpx.Response(200, json={"data": {"books": []}})
+        return httpx.Response(200, json={"data": {"search": {"results": {"hits": []}}}})
     respx.post("https://api.hardcover.app/v1/graphql").mock(side_effect=_capture)
     client = HardcoverClient(token="eyJ-fake")
-    await client.fetch_book_by_title("x")
+    book = await client.fetch_book_by_title("x")
+    assert book is None  # no hits -> no book
     assert captured["auth"] == "Bearer eyJ-fake"
     await client.aclose()
 ```
@@ -332,12 +344,28 @@ from lacuna.schemas.sources import HardcoverReview
 
 ENDPOINT = "https://api.hardcover.app/v1/graphql"
 
-_BOOK_BY_TITLE = """
-query BookByTitle($q: String!) {
-  books(where: {title: {_ilike: $q}}, limit: 1) {
+# Hardcover blocks `_ilike`, so fuzzy title->id goes through the Typesense `search`.
+_SEARCH_BOOK = """
+query SearchBook($q: String!) {
+  search(query: $q, query_type: "Book", per_page: 5, page: 1) {
+    results
+  }
+}
+"""
+
+# No `reviews` relationship exists; live reviews live in `user_books`.
+_REVIEWS_BY_BOOK = """
+query ReviewsByBook($book_id: Int!, $limit: Int!) {
+  user_books(
+    where: {book_id: {_eq: $book_id}, has_review: {_eq: true}}
+    order_by: {reviewed_at: desc_nulls_last}
+    limit: $limit
+  ) {
     id
-    title
-    reviews { id rating body user_id created_at }
+    rating
+    review_raw
+    reviewed_at
+    user_id
   }
 }
 """
@@ -368,14 +396,30 @@ class HardcoverClient:
             raise RuntimeError(f"Hardcover GraphQL error: {payload['errors']}")
         return payload["data"]
 
-    async def fetch_book_by_title(self, title: str) -> HardcoverBook | None:
-        data = await self._query(_BOOK_BY_TITLE, {"q": f"%{title}%"})
-        books = data.get("books") or []
-        return HardcoverBook.model_validate(books[0]) if books else None
+    @staticmethod
+    def _best_hit(search_data: dict) -> dict | None:
+        results = (search_data.get("search") or {}).get("results") or {}
+        docs = [h.get("document") or {} for h in (results.get("hits") or [])]
+        docs = [d for d in docs if d.get("id") is not None]
+        return max(docs, key=lambda d: d.get("users_read_count") or 0) if docs else None
+
+    async def fetch_reviews(self, book_id: int, *, limit: int = 50) -> list[HardcoverReview]:
+        data = await self._query(_REVIEWS_BY_BOOK, {"book_id": int(book_id), "limit": limit})
+        return [HardcoverReview.from_user_book(r) for r in (data.get("user_books") or [])]
+
+    async def fetch_book_by_title(self, title: str, *, review_limit: int = 50) -> HardcoverBook | None:
+        doc = self._best_hit(await self._query(_SEARCH_BOOK, {"q": title}))
+        if doc is None:
+            return None
+        book_id = int(doc["id"])
+        reviews = await self.fetch_reviews(book_id, limit=review_limit)
+        return HardcoverBook(id=book_id, title=doc.get("title") or title, reviews=reviews)
 
     async def aclose(self) -> None:
         await self._client.aclose()
 ```
+
+> `HardcoverReview.from_user_book(row)` maps the `user_books` shape onto the model: `body=review_raw`, `created_at=reviewed_at`. Defined in `lacuna/schemas/sources.py`.
 
 > **Flag (CLAUDE.md §2):** the exact GraphQL field names (`books`, `reviews`, `user_id`, `created_at`) are Hardcover's published schema as of the PRD, but Hardcover's schema is the explicit subject of the **G0 gate**. If G0 reveals different field names, this query string is the one-file change point — do not propagate the assumption elsewhere.
 

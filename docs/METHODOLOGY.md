@@ -201,3 +201,14 @@ All bulk text processing is local and free. No raw review text is sent to any ex
 The optional Anthropic API call (for a narrative draft in the export) receives only the already-aggregated cluster labels and summary statistics — never raw review text. The export is fully functional with `ANTHROPIC_API_KEY` unset, at $0 runtime cost.
 
 Revision hashes are dynamically resolved, validated, and written to `config/advanced.yaml` at build time by `scripts/pin_revisions.py`. A build fails loudly if any revision cannot be verified.
+
+---
+
+## 13. Hardcover API Resolution (Discovered at Build Time)
+
+The PRD assumed a straightforward title→reviews lookup against Hardcover. The live API (a Hasura/GraphQL front end, confirmed 2026-06-17 against the G0 gate) differs in two ways that forced the adapter's shape:
+
+1. **`_ilike` is blocked server-side** ("ilike and related operations are not permitted on this server"). Fuzzy title matching by SQL operator is impossible. Bare-title `_eq` is permitted but only matches empty *edition stubs* (0 reads/ratings), not the canonical work. **Resolution:** title→id goes through Hardcover's Typesense-backed `search(query, query_type:"Book")` query; the adapter picks the hit with the highest `users_read_count` as canonical.
+2. **There is no `reviews` relationship on `books`.** Live reviews live in the **`user_books`** table (`where: {book_id:{_eq:$id}, has_review:{_eq:true}}`), where the review text is the `review_raw` column and the date is `reviewed_at`. `HardcoverReview.from_user_book()` maps that shape onto our model.
+
+The G0 gate passes against this path: sample title "Atomic Habits" resolves to the canonical edition (3,125 readers) and returns 50 live reviews. This is a request-shape adaptation only — the architecture (Hardcover as the fresh live-sentiment platform, kept on a separate track until cross-platform aggregation) is unchanged.

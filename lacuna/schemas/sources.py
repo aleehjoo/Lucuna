@@ -14,6 +14,19 @@ class HardcoverReview(BaseModel):
     user_id: int | None = None
     created_at: datetime | None = None
 
+    @classmethod
+    def from_user_book(cls, row: dict) -> "HardcoverReview":
+        """Map a Hardcover `user_books` row (where reviews actually live) to our model.
+        Hardcover has no `reviews` relationship; review text is `review_raw`, the date
+        is `reviewed_at`."""
+        return cls(
+            id=row["id"],
+            rating=row.get("rating"),
+            body=row.get("review_raw") or row.get("review"),
+            user_id=row.get("user_id"),
+            created_at=row.get("reviewed_at"),
+        )
+
 
 class GoogleVolume(BaseModel):
     title: str

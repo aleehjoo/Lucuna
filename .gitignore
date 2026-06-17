@@ -1,7 +1,8 @@
 # Secrets — never commit (CLAUDE.md §5)
+# .env.example was previously committed with real keys; it is now an untracked,
+# local-only placeholder template. Both .env and .env.example stay ignored.
 .env
 .env.*
-!.env.example
 .claude.json
 .claude/
 

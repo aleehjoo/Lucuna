@@ -9,6 +9,7 @@ normalization: rank
 crosswalk_auto_accept: 0.85
 curated_reviews_per_work: 15
 longtail_share: 0.3
+works_trigram_threshold: 0.6   # §6.3 tie-break: min title trigram Jaccard to merge same-author editions
 recent_supply_surge_threshold: 0.3
 recent_supply_surge_downweight: 0.7
 cluster_merge_similarity: 0.75

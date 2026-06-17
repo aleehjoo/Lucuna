@@ -132,7 +132,22 @@ uv run lacuna seed
 
 This runs the offline seed pipeline: streams the Amazon Reviews corpus, embeds and clusters critical reviews locally, and writes distilled aspect clusters to your Supabase project. No raw review text is committed or exported. This is a slow one-time step — expect 20–60+ minutes depending on niche size and your machine. Subsequent runs are fast (cached).
 
-**Note:** the `seed`, `analyze`, `sweep`, and `export` CLI commands are implemented in later workstreams (C through H). The commands listed here are the target interface — check which workstreams are complete before running them.
+**Bounded scan:** the seed streams a bounded slice of the corpus (defaults: `--meta-limit 200000 --review-limit 1000000 --max-works 60`, all overridable). Niche subjects surface fewer works under a bounded scan — raise the limits for fuller coverage. Coverage is recorded in `analysis_runs.counts`.
+
+---
+
+## Step 8b — Score & Export the Context Pack
+
+```bash
+uv run lacuna sweep      # category sweep over seeded works -> ranked Context Pack
+uv run lacuna export     # (re)generate the pack from the latest seeded data
+```
+
+Both run at **$0** with no external keys: they read the seeded works + aspect clusters, score the cohort (missing demand/supply layers are *withheld*, not zeroed — candidates are flagged `incomplete`), and write `pack.json` + `pack.md`. The single-title fresh-pull path needs a live token:
+
+```bash
+uv run lacuna analyze --isbn <isbn>    # needs HARDCOVER_API_TOKEN in .env (fresh Hardcover pull)
+```
 
 ---
 

@@ -1,6 +1,5 @@
 # alembic/env.py
 import asyncio
-import ssl
 from logging.config import fileConfig
 
 from alembic import context
@@ -9,6 +8,7 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from lacuna.config import get_settings
 from lacuna.db.models import Base
+from lacuna.db.session import build_ssl_context
 
 config = context.config
 if config.config_file_name is not None:
@@ -33,7 +33,7 @@ async def run_async_migrations() -> None:
         config.get_section(config.config_ini_section),
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
-        connect_args={"ssl": ssl.create_default_context()},
+        connect_args={"ssl": build_ssl_context()},
     )
     async with connectable.connect() as connection:
         await connection.run_sync(do_run_migrations)

@@ -41,6 +41,9 @@ class Settings(BaseSettings):
     google_books_api_key: str | None = Field(default=None, alias="GOOGLE_BOOKS_API_KEY")
     nyt_books_api_key: str | None = Field(default=None, alias="NYT_BOOKS_API_KEY")
     anthropic_api_key: str | None = Field(default=None, alias="ANTHROPIC_API_KEY")
+    # TLS cert verification for the DB connection. Default verifies; set false only on
+    # networks with a TLS-intercepting middlebox whose root no trust store accepts.
+    database_ssl_verify: bool = Field(default=True, alias="LACUNA_DB_SSL_VERIFY")
 
     @property
     def async_database_url(self) -> str:

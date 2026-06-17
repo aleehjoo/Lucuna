@@ -107,3 +107,9 @@ Google Books and NYT data are accessed under their respective developer terms. B
 - It is not a predictor of publishing success.
 
 It is a hypothesis generator over historical and recent reader sentiment, gated by imperfect demand proxies, with explicit confidence and provenance on every output. Treat every candidate as a hypothesis that requires external validation before acting on it.
+
+## 10. Bounded Seed Scan & Corpus-Only Incompleteness
+
+The seed streams the McAuley corpus under a **bounded linear scan** (default 200k meta / 1M review rows). The corpus has no server-side subject filter, so niche targets (e.g. stoicism) surface proportionally fewer works than common ones, and a work's reviews only count if they fall inside the scanned review window. A thin or empty result is a **scan-coverage artifact, not a market signal** — raise `--meta-limit`/`--review-limit` for fuller coverage. Coverage bounds are recorded in `analysis_runs.counts`.
+
+A **corpus-only run** (`lacuna export`/`sweep` with no external keys) carries no demand or supply signals, so those scoring components are *withheld*, not zeroed — every candidate is flagged `incomplete` and its `gap_score` is held back rather than fabricated. This is by design (missing ≠ zero); demand/supply enter once the NYT/Google/Hardcover/Open Library signals are seeded.

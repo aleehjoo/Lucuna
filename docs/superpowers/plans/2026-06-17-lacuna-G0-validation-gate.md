@@ -272,6 +272,14 @@ from lacuna.pipeline.validation import (
 app = typer.Typer(help="Lacuna — reader-dissatisfaction gap engine", no_args_is_help=True)
 
 
+@app.callback()
+def _cli() -> None:
+    """Lacuna CLI. A no-op callback keeps the app a multi-command GROUP so the
+    subcommand name 'validate-hardcover' is required (a single-command Typer app
+    otherwise collapses into one command and rejects the name). Workstream I adds
+    seed/analyze/sweep/export here."""
+
+
 def _run_validation() -> ValidationResult:
     """Build the live client + DB recorder and run the gate. Patched in tests."""
     settings = get_settings()

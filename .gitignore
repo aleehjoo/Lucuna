@@ -1,0 +1,25 @@
+# Secrets — never commit (CLAUDE.md §5)
+.env
+.env.*
+!.env.example
+.claude.json
+.claude/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+.pytest_cache/
+
+# Raw corpora are never committed (PRD §0.5)
+data/
+*.parquet
+*.jsonl
+
+# HF / model caches
+.cache/
+
+# OS
+.DS_Store
+Thumbs.db

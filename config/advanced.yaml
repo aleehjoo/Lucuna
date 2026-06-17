@@ -1,0 +1,25 @@
+min_sample_gate: 20
+bayes_shrinkage_strength: 15
+demand_gate_floor_epsilon: 0.05
+demand_gate_steepness_k: 8
+demand_gate_midpoint_d0: 0.4
+geomean_weight_supply: 1.0
+geomean_weight_unmet: 1.0
+normalization: rank
+crosswalk_auto_accept: 0.85
+curated_reviews_per_work: 15
+longtail_share: 0.3
+recent_supply_surge_threshold: 0.3
+recent_supply_surge_downweight: 0.7
+cluster_merge_similarity: 0.75
+models:
+  embedding:
+    name: sentence-transformers/all-MiniLM-L6-v2
+    revision: 1110a243fdf4706b3f48f1d95db1a4f5529b4d41
+  zero_shot:
+    name: facebook/bart-large-mnli
+    revision: d7645e127eaf1aefc7862fd59a17a5aa8558b8ce
+dataset:
+  amazon_reviews:
+    name: McAuley-Lab/Amazon-Reviews-2023
+    revision: 2b6d039ed471f2ba5fd2acb718bf33b0a7e5598e

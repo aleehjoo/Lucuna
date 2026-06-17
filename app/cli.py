@@ -66,5 +66,38 @@ def seed_cmd(
     typer.secho(f"SEED OK — {counts}", fg=typer.colors.GREEN)
 
 
+@app.command("analyze")
+def analyze_cmd(
+    isbn: str = typer.Option(None, help="ISBN to resolve."),
+    title: str = typer.Option(None, help="Title to resolve."),
+    out: str = typer.Option("pack.json", help="Output Context Pack path."),
+) -> None:
+    """Single-Title Watchlist analysis (fresh Hardcover pull) -> Context Pack."""
+    import asyncio
+
+    from lacuna.pipeline.single_title import analyze
+    asyncio.run(analyze(isbn=isbn, title=title, out=out))
+
+
+@app.command("sweep")
+def sweep_cmd(out: str = typer.Option("sweep_pack.json", help="Output Context Pack path.")) -> None:
+    """Category Sweep over the seeded works -> ranked Context Pack ($0, corpus-only)."""
+    import asyncio
+
+    from lacuna.pipeline.category_sweep import sweep
+    counts = asyncio.run(sweep(out=out))
+    typer.secho(f"SWEEP OK — {counts}", fg=typer.colors.GREEN)
+
+
+@app.command("export")
+def export_cmd(out: str = typer.Option("pack.json", help="Output Context Pack path.")) -> None:
+    """(Re)generate the Context Pack from the latest seeded data ($0)."""
+    import asyncio
+
+    from lacuna.pipeline.single_title import export_only
+    counts = asyncio.run(export_only(out=out))
+    typer.secho(f"EXPORT OK — {counts}", fg=typer.colors.GREEN)
+
+
 if __name__ == "__main__":
     app()

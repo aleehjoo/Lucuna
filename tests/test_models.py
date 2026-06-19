@@ -15,3 +15,10 @@ def test_reviews_has_384_dim_vector():
     col = Base.metadata.tables["reviews"].c["embedding"]
     # pgvector Vector stores dim on the type
     assert getattr(col.type, "dim", None) == 384
+
+def test_job_model_columns():
+    from lacuna.db.models import Job
+    cols = Job.__table__.columns
+    assert {"id", "project_id", "kind", "status", "progress_pct", "step",
+            "counts", "result_ref", "error_detail", "created_at", "updated_at"} <= set(cols.keys())
+    assert Job.__tablename__ == "jobs"

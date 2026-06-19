@@ -198,3 +198,26 @@ class AnalysisRun(Base):
     status: Mapped[str] = mapped_column(Text, nullable=False, server_default=sa_text("'running'"))
     counts: Mapped[dict | None] = mapped_column(JSONB)
     error_detail: Mapped[str | None] = mapped_column(Text)
+
+
+class Job(Base):
+    """UI-facing async-work status surface (Frontend PRD §5). One row per
+    seed/live_search/sweep run; the UI polls it. `analysis_runs` stays for
+    engine-level observability — `jobs` is the product status table."""
+    __tablename__ = "jobs"
+    __table_args__ = (
+        CheckConstraint("kind in ('seed','live_search','sweep')"),
+        CheckConstraint("status in ('queued','running','done','error')"),
+    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True,
+                                          server_default=sa_text("gen_random_uuid()"))
+    project_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"))
+    kind: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(Text, nullable=False, server_default=sa_text("'queued'"))
+    progress_pct: Mapped[float] = mapped_column(Numeric(5, 2), nullable=False, server_default=sa_text("0"))
+    step: Mapped[str | None] = mapped_column(Text)
+    counts: Mapped[dict | None] = mapped_column(JSONB)
+    result_ref: Mapped[str | None] = mapped_column(Text)
+    error_detail: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), server_default=sa_text("now()"))
+    updated_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), server_default=sa_text("now()"))

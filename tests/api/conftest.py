@@ -25,7 +25,12 @@ def runtime():
 
 @pytest.fixture
 async def client(runtime):
-    app = create_app(runtime=runtime, sessionmaker=None)
+    import os
+    sm = None
+    if os.getenv("DATABASE_URL"):
+        from lacuna.db.session import build_sessionmaker
+        sm = build_sessionmaker()
+    app = create_app(runtime=runtime, sessionmaker=sm)
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as c:
         yield c

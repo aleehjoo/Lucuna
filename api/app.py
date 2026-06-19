@@ -40,9 +40,7 @@ def create_app(*, runtime: EngineRuntime | None = None, sessionmaker=None) -> Fa
         ready = app.state.runtime is not None
         return {"status": "ok" if ready else "warming", "models_ready": ready}
 
-    # Routers are registered in later tasks:
-    # from api.routers import projects, reads, export, seed, search, jobs
-    # for r in (projects, reads, export, seed, search, jobs):
-    #     app.include_router(r.router)
+    from api.routers import projects
+    app.include_router(projects.router)
 
     return app

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import sys
 
 import typer
 
@@ -11,6 +12,16 @@ from lacuna.adapters.hardcover import HardcoverClient
 from lacuna.pipeline.validation import (
     ValidationResult, make_db_recorder, validate_hardcover,
 )
+
+# Windows defaults stdout/stderr to cp1252; a redirected `lacuna seed > log.txt`
+# then crashes encoding the seed's progress glyphs (→ · …) the moment Pass 1
+# finishes. Force UTF-8 so long runs (PRD §6) survive redirection;
+# errors="replace" is a belt-and-suspenders guard if reconfigure no-ops.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, ValueError):  # not a reconfigurable TextIO (e.g. captured)
+        pass
 
 app = typer.Typer(help="Lacuna — reader-dissatisfaction gap engine", no_args_is_help=True)
 
@@ -51,7 +62,7 @@ def validate_hardcover_cmd() -> None:
 @app.command("seed")
 def seed_cmd(
     rebuild: bool = typer.Option(True, help="Full recompute (only supported mode)."),
-    max_works: int = typer.Option(60, help="Cap on works selected for the seed."),
+    max_works: int = typer.Option(25, help="Cap on works selected for the seed."),
     meta_limit: int = typer.Option(200_000, help="Max corpus meta rows to scan."),
     review_limit: int = typer.Option(1_000_000, help="Max corpus review rows to scan."),
 ) -> None:

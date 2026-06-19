@@ -43,13 +43,14 @@ class PlanReview:
 
 @dataclass
 class PlanCluster:
-    work_key: str
-    local_id: int
+    local_id: int                    # globally unique within the plan (niche-level pass)
     label: str
     member_count: int
     reviewer_count: int
     helpful_weight: float
     representative: str
+    work_key: str | None = None      # None = niche-level (pooled across the niche, §6.6)
+    bisac_code: str | None = None
     platforms: list[str] = field(default_factory=lambda: [PLATFORM])
 
 
@@ -85,14 +86,18 @@ class SeedPlan:
 
 
 def _subject_match(meta: dict, keywords: list[str]) -> bool:
+    """Precision-first subject match (PRD §6 first-pass filter). Keywords are
+    matched against the Amazon CATEGORY path only (`categories` + `main_category`),
+    NOT the title or description. A blurb that merely mentions "algorithms" or
+    "workout programming" is not a programming book; matching free text pulled in
+    heavy pollution (novels, fitness, kids' workbooks) that then dominated the
+    clusterable set. Amazon categories are BISAC-derived and reliable, so keywords
+    act as category-leaf terms (e.g. "programming" -> "Programming Languages")."""
     if not keywords:
         return True
     hay = " ".join([
-        str(meta.get("title") or ""),
         " ".join(meta.get("categories") or []),
         str(meta.get("main_category") or ""),
-        " ".join(meta.get("description") or []) if isinstance(meta.get("description"), list)
-        else str(meta.get("description") or ""),
     ]).lower()
     return any(k.lower() in hay for k in keywords)
 
@@ -113,8 +118,10 @@ def build_seed_plan(
     cap_per_work: int,
     longtail_share: float,
     min_sample_gate: int,
+    min_critical_per_work: int,
     trigram_threshold: float,
     max_works: int,
+    bisac_code: str | None = None,
     meta_limit: int = DEFAULT_META_LIMIT,
     review_limit: int = DEFAULT_REVIEW_LIMIT,
     cluster_min_size: int = 2,
@@ -183,24 +190,45 @@ def build_seed_plan(
     _p(f"pass2 done: {matched_reviews:,} matched reviews across {len(reviews_by_work):,} works "
        f"(scanned {review_scanned:,} review rows)")
 
-    # ---- Select works with a long-tail floor ----
+    # ---- Select works by CLUSTERABLE critical mass (PRD §6.1.4) ----
+    # Clustering only ever consumes critical reviews (rating <= 3), so selection
+    # must too: a work below `min_critical_per_work` can only produce HDBSCAN
+    # noise, never a cluster. Excluding such works narrows the §6.5 long tail
+    # (documented deviation, METHODOLOGY.md §15); the long-tail floor still
+    # operates within the clusterable band.
+    crit_count = {
+        k: sum(1 for x in ratings_by_work.get(k, []) if x <= 3)
+        for k in reviews_by_work
+    }
     work_dicts = [
-        {"key": k, "review_count": len(v)} for k, v in reviews_by_work.items()
+        {"key": k, "review_count": crit_count[k]}
+        for k in reviews_by_work if crit_count[k] >= min_critical_per_work
     ]
     selected = select_works_with_longtail(
         work_dicts, n=min(max_works, len(work_dicts)),
         longtail_share=longtail_share, low_threshold=min_sample_gate,
     )
     selected_keys = [w["key"] for w in selected]
-    _p(f"selected {len(selected_keys):,} works (long-tail floor) from {len(work_dicts):,} candidates; "
-       f"embedding/clustering now…")
+    _p(f"selected {len(selected_keys):,} works (>= {min_critical_per_work} critical reviews, "
+       f"long-tail floor) from {len(work_dicts):,} eligible / {len(reviews_by_work):,} matched "
+       f"works; embedding/clustering now…")
 
     plan = SeedPlan()
     # work -> the group (for title/author/editions)
-    group_by_key: dict[str, object] = {}
-    for g in groups:
-        group_by_key[normalized_key(g.title, g.author)] = g
+    group_by_key: dict[str, object] = {
+        normalized_key(g.title, g.author): g for g in groups
+    }
 
+    # ---- Per-work: build works/editions/reviews + embed; pool for niche clustering ----
+    # Clustering is NICHE-LEVEL (PRD §6.6): per-work HDBSCAN on a dozen reviews in
+    # 384-dim cosine space almost always returns all-noise, so critical reviews are
+    # POOLED across the selected works and clustered ONCE. Clusters carry
+    # work_id=None (niche-level) + the niche bisac_code; member reviews keep their
+    # own work_id, so per-work provenance survives.
+    pooled_reviews: list[PlanReview] = []     # PlanReview objects, pooled across works
+    pooled_src: list[object] = []             # parallel source reviews (uid / helpful_vote)
+    pooled_texts: list[str] = []
+    pooled_embeds: list[list[float]] = []
     for wi, wkey in enumerate(selected_keys, 1):
         g = group_by_key.get(wkey)
         if g is None:
@@ -223,15 +251,15 @@ def build_seed_plan(
                 price_cents=rec.price_cents,
             ))
 
-        # ---- Critical-review selection + local NLP per work ----
+        # ---- Critical-review selection + local embedding (clustering pooled below) ----
         critical = select_critical_reviews(reviews_by_work[wkey], cap=cap_per_work)
         texts = [getattr(r, "text", "") or "" for r in critical]
-        plan_reviews: list[PlanReview] = []
+        work_reviews: list[PlanReview] = []
         for r in critical:
             asin = getattr(r, "parent_asin", None) or getattr(r, "asin", None)
             uid = getattr(r, "user_id", None)
             ts = getattr(r, "timestamp", None)
-            pr = PlanReview(
+            work_reviews.append(PlanReview(
                 external_id=f"{asin}:{uid}:{ts}",
                 work_key=wkey, edition_asin=asin,
                 rating=float(getattr(r, "rating", 0) or 0),
@@ -239,28 +267,36 @@ def build_seed_plan(
                 review_date=getattr(r, "review_date", None),
                 text=getattr(r, "text", "") or "",
                 sentiment=_rating_sentiment(float(getattr(r, "rating", 0) or 0)),
-            )
-            plan_reviews.append(pr)
-
+            ))
         if texts:
             vecs = embedder.encode(texts)
-            for pr, v in zip(plan_reviews, vecs):
+            for pr, src, t, v in zip(work_reviews, critical, texts, vecs):
                 pr.embedding = [float(x) for x in v]
-            labels = cluster_embeddings(vecs, min_cluster_size=cluster_min_size)
-            for local_id, member_idxs in members_by_cluster(labels).items():
-                members = [critical[i] for i in member_idxs]
-                m_texts = [texts[i] for i in member_idxs]
-                aspect = labeler.label_cluster(m_texts)
-                reviewer_ct = len({getattr(m, "user_id", None) for m in members})
-                helpful_w = float(sum(int(getattr(m, "helpful_vote", 0) or 0) for m in members))
-                plan.clusters.append(PlanCluster(
-                    work_key=wkey, local_id=int(local_id), label=aspect.label,
-                    member_count=len(member_idxs), reviewer_count=reviewer_ct,
-                    helpful_weight=helpful_w, representative=aspect.representative,
-                ))
-                for i in member_idxs:
-                    plan_reviews[i].cluster_local_id = int(local_id)
-        plan.reviews.extend(plan_reviews)
+                pooled_reviews.append(pr)
+                pooled_src.append(src)
+                pooled_texts.append(t)
+                pooled_embeds.append(pr.embedding)
+        plan.reviews.extend(work_reviews)
+
+    # ---- Niche-level clustering: pool across the niche, cluster once (PRD §6.6) ----
+    if pooled_embeds:
+        labels = cluster_embeddings(pooled_embeds, min_cluster_size=cluster_min_size)
+        for local_id, member_idxs in members_by_cluster(labels).items():
+            members_src = [pooled_src[i] for i in member_idxs]
+            m_texts = [pooled_texts[i] for i in member_idxs]
+            aspect = labeler.label_cluster(m_texts)
+            reviewer_ct = len({getattr(m, "user_id", None) for m in members_src})
+            helpful_w = float(sum(int(getattr(m, "helpful_vote", 0) or 0) for m in members_src))
+            plan.clusters.append(PlanCluster(
+                local_id=int(local_id), label=aspect.label,
+                member_count=len(member_idxs), reviewer_count=reviewer_ct,
+                helpful_weight=helpful_w, representative=aspect.representative,
+                work_key=None, bisac_code=bisac_code,
+            ))
+            for i in member_idxs:
+                pooled_reviews[i].cluster_local_id = int(local_id)
+    _p(f"niche clustering: {len(plan.clusters):,} clusters from "
+       f"{len(pooled_embeds):,} pooled critical reviews")
 
     plan.counts = {
         "meta_scanned": meta_scanned - 1 if meta_scanned else 0,

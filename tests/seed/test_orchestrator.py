@@ -51,11 +51,12 @@ REVIEWS = [
 ]
 
 
-def _build():
+def _build(min_critical_per_work=2):
     return build_seed_plan(
         META, REVIEWS, embedder=FakeEmbedder(), labeler=FakeLabeler(),
-        subject_keywords=["meditations", "discipline"],
+        subject_keywords=["philosophy", "self-help"],  # matched against category path
         cap_per_work=15, longtail_share=0.3, min_sample_gate=3,
+        min_critical_per_work=min_critical_per_work,
         trigram_threshold=0.6, max_works=2,
     )
 
@@ -65,6 +66,16 @@ def test_selects_both_works_with_longtail():
     assert plan.counts["works_selected"] == 2
     titles = {w.title for w in plan.works}
     assert titles == {"Meditations", "Discipline Daily"}
+
+
+def test_min_critical_floor_excludes_thin_works():
+    # P1 (Meditations) has 3 critical reviews; P2 (Discipline Daily) has 2.
+    # With the floor at 3, P2 is below it and must be excluded (§6.1.4): a work
+    # that can only produce HDBSCAN noise is never selected.
+    plan = _build(min_critical_per_work=3)
+    assert {w.title for w in plan.works} == {"Meditations"}
+    assert all(r.work_key for r in plan.reviews)
+    assert all(r.edition_asin != "P2" for r in plan.reviews)
 
 
 def test_off_subject_work_excluded():

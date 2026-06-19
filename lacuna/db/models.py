@@ -73,7 +73,10 @@ class Edition(Base):
 class Review(Base):
     __tablename__ = "reviews"
     __table_args__ = (
-        UniqueConstraint("platform", "external_id"),
+        # Per-project uniqueness (migration 0002): the same external review may
+        # legitimately belong to two niches whose corpora overlap, so isolation
+        # is by project_id (PRD §17.10). A global key broke multi-project use.
+        UniqueConstraint("project_id", "platform", "external_id"),
         CheckConstraint("platform in ('amazon_corpus','hardcover')"),
     )
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)

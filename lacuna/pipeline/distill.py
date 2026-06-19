@@ -71,6 +71,22 @@ async def distill_score_export(*, out: str = "pack.json", mode: str = "category_
         candidates.append(cand)
         work_by_ref[str(w.id)] = w
 
+    # Niche-level (pooled) clusters -> BISAC-bucket candidates (Category Sweep, §11/§6.6).
+    # The seed clusters at the niche level (work_id=None), so the distilled complaint
+    # clusters surface here, on the BISAC candidate, rather than per-work.
+    niche_by_bisac: dict[str, list] = {}
+    for c in clusters_by_work.get(None, []):
+        niche_by_bisac.setdefault(c.bisac_code or "niche", []).append(c)
+    bisac_meta: dict[str, tuple] = {}
+    for code, cl in niche_by_bisac.items():
+        ref = f"bisac:{code}"
+        candidates.append(derive_components(
+            ref_id=ref, scope="bisac", demand_rows=[], title_count=None,
+            cluster_weights=[(c.reviewer_count, float(c.helpful_weight or 0.0)) for c in cl],
+            sample_size=sum(c.member_count for c in cl), platforms=("amazon_corpus",),
+        ))
+        bisac_meta[ref] = (code, cl)
+
     results = score_cohort(candidates, load_cfg())
 
     # Cross-platform agreement (corpus-only -> single platform -> 0.0, but compute honestly).
@@ -99,11 +115,19 @@ async def distill_score_export(*, out: str = "pack.json", mode: str = "category_
                     incomplete=r.incomplete, blind_spot=r.blind_spot,
                     recent_supply_surge=r.recent_supply_surge,
                 ))
-                w = work_by_ref[r.ref_id]
-                wc = sorted(clusters_by_work.get(w.id, []),
-                            key=lambda c: c.reviewer_count, reverse=True)
+                if r.ref_id in work_by_ref:
+                    w = work_by_ref[r.ref_id]
+                    ref_kind, title = "work", w.title
+                    wc = sorted(clusters_by_work.get(w.id, []),
+                                key=lambda c: c.reviewer_count, reverse=True)
+                elif r.ref_id in bisac_meta:
+                    code, cl = bisac_meta[r.ref_id]
+                    ref_kind, title = "bisac", f"{code} — niche complaint clusters"
+                    wc = sorted(cl, key=lambda c: c.reviewer_count, reverse=True)
+                else:
+                    continue
                 pack_candidates.append(PackCandidate(
-                    ref="work", title_or_subject=w.title,
+                    ref=ref_kind, title_or_subject=title,
                     gap_score=float(r.gap_score) if r.gap_score is not None else 0.0,
                     demand=float(r.demand_score) if r.demand_score is not None else 0.0,
                     supply_scarcity=float(r.supply_scarcity) if r.supply_scarcity is not None else 0.0,

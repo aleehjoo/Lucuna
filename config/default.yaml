@@ -1,6 +1,6 @@
-project_name: "Example - Stoic Self-Help"
-target_bisac: ["PHI011000", "PHI000000", "SEL036000", "SEL024000"]   # Stoicism, Philosophy/General, Personal Growth, Motivational
-subject_filter: { keywords: ["stoicism", "stoic", "marcus aurelius", "seneca", "epictetus", "meditations", "ryan holiday"] }
+project_name: "Example - Programming & Software Books"
+target_bisac: ["COM051000", "COM051010", "COM051360", "COM051230", "COM060160"]   # Programming/General, Languages/General, Languages/Python, Software Dev & Engineering, Web Programming
+subject_filter: { keywords: ["programming", "web development", "computer science", "software", "operating systems", "networking", "databases", "data science", "machine learning"] }   # matched against Amazon category path only (see orchestrator._subject_match)
 timely_vs_evergreen: 0.5                        # 0=evergreen depth, 1=fresh
 recency_window_months: 12
 export: { max_candidates: 15, token_budget: 4000 }

@@ -10,6 +10,9 @@ crosswalk_auto_accept: 0.85
 crosswalk_auto_reject: 0.55    # cosine below this -> auto-reject; [0.55,0.85) -> unmapped queue (§13)
 curated_reviews_per_work: 15
 longtail_share: 0.3
+min_critical_per_work: 5       # §6.1.4: a work needs >= this many critical reviews to be
+                               # selectable — below it HDBSCAN yields only noise, never a
+                               # cluster. Narrows the §6.5 long tail (see METHODOLOGY.md §15).
 works_trigram_threshold: 0.6   # §6.3 tie-break: min title trigram Jaccard to merge same-author editions
 recent_supply_surge_threshold: 0.3
 recent_supply_surge_downweight: 0.7

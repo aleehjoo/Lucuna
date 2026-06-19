@@ -11,6 +11,7 @@ from __future__ import annotations
 import datetime as dt
 
 from sqlalchemy import delete, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from lacuna.db.models import AnalysisRun, AspectCluster, Edition, Project, Review, Work
@@ -76,26 +77,38 @@ async def persist_seed_plan(
             await session.flush()
             edition_id_by_asin = {k: v.id for k, v in edition_id_by_asin.items()}
 
-            # Aspect clusters -> id keyed by (work_key, local_id)
-            cluster_id_by_key: dict[tuple, object] = {}
+            # Aspect clusters -> id keyed by the plan's global local_id. Clusters are
+            # niche-level (work_id=None, bisac_code set) when pooled across the niche
+            # (PRD §6.6); a per-work cluster (work_key set) maps to its work_id.
+            cluster_id_by_local: dict[int, object] = {}
             for c in plan.clusters:
                 obj = AspectCluster(
-                    project_id=proj.id, work_id=work_id_by_key[c.work_key],
+                    project_id=proj.id,
+                    work_id=work_id_by_key[c.work_key] if c.work_key else None,
+                    bisac_code=c.bisac_code,
                     label=c.label, member_count=c.member_count,
                     reviewer_count=c.reviewer_count, helpful_weight=c.helpful_weight,
                     platforms=c.platforms, cross_platform=False,
                     representative=c.representative,
                 )
                 session.add(obj)
-                cluster_id_by_key[(c.work_key, c.local_id)] = obj
+                cluster_id_by_local[c.local_id] = obj
             await session.flush()
-            cluster_id_by_key = {k: v.id for k, v in cluster_id_by_key.items()}
+            cluster_id_by_local = {k: v.id for k, v in cluster_id_by_local.items()}
 
-            # Reviews
+            # Reviews — idempotent upsert (PRD §6.1.7). Dedupe within the batch
+            # (the corpus can carry the same review twice → identical external_id)
+            # then ON CONFLICT DO NOTHING so a re-seed never crashes on a key that
+            # already exists. Uniqueness is per-project (migration 0002).
+            seen_external: set[str] = set()
+            review_rows: list[dict] = []
             for r in plan.reviews:
-                cid = cluster_id_by_key.get((r.work_key, r.cluster_local_id)) \
+                if r.external_id in seen_external:
+                    continue
+                seen_external.add(r.external_id)
+                cid = cluster_id_by_local.get(r.cluster_local_id) \
                     if r.cluster_local_id is not None else None
-                session.add(Review(
+                review_rows.append(dict(
                     work_id=work_id_by_key[r.work_key], project_id=proj.id,
                     edition_id=edition_id_by_asin.get(r.edition_asin),
                     platform="amazon_corpus", external_id=r.external_id,
@@ -104,6 +117,10 @@ async def persist_seed_plan(
                     embedding=r.embedding, aspect_cluster_id=cid,
                     sentiment=r.sentiment, processed=True,
                 ))
+            if review_rows:
+                await session.execute(
+                    pg_insert(Review).values(review_rows).on_conflict_do_nothing(
+                        index_elements=["project_id", "platform", "external_id"]))
         # transaction committed on exit
         return {"project_id": str(proj.id), **plan.counts}
 

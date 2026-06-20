@@ -23,13 +23,6 @@ from lacuna.export.context_pack import Candidate, Complaint, build_pack
 from lacuna.nlp.clustering import cluster_embeddings, members_by_cluster
 
 
-def _sentiment(rating: float | None) -> float:
-    """rating 1->-1.0 .. 5->+1.0, clamped; mirrors the seed's proxy."""
-    if rating is None:
-        return 0.0
-    return max(-1.0, min(1.0, (float(rating) - 3.0) / 2.0))
-
-
 async def analyze_live(*, title: str, hardcover, embedder, labeler,
                        seeded_clusters: list[AspectClusterIn] | None = None,
                        cluster_min_size: int = 2, review_limit: int = 50,
@@ -41,7 +34,7 @@ async def analyze_live(*, title: str, hardcover, embedder, labeler,
     _tick("resolving", 10.0)
     book = await hardcover.fetch_book_by_title(title, review_limit=review_limit)
     if book is None:
-        return {"title": title, "fresh_only": seeded_clusters is None, "review_count": 0,
+        return {"title": title, "fresh_only": not seeded_clusters, "review_count": 0,
                 "clusters": [], "agreement_pct": 0.0, "not_found": True,
                 "pack": build_pack(project=title, bisac=[], mode="single_title",
                                    generated_at=dt.datetime.now(dt.timezone.utc).isoformat(),

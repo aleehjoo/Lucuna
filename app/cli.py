@@ -109,7 +109,7 @@ def seed_job_cmd(
                           review_limit=review_limit, progress_cb=cb)
         asyncio.run(jobs_svc.update_job(sm, jid, status="done", progress_pct=100,
                                         counts=counts,
-                                        result_ref=str(counts.get("project_id", ""))))
+                                        result_ref=str(counts.get("project_id") or "")))
     except Exception as exc:  # noqa: BLE001 — record then re-raise for the subprocess exit code
         asyncio.run(jobs_svc.update_job(sm, jid, status="error", error_detail=str(exc)))
         raise

@@ -126,6 +126,7 @@ def build_seed_plan(
     review_limit: int = DEFAULT_REVIEW_LIMIT,
     cluster_min_size: int = 2,
     on_progress=None,
+    on_progress_event=None,
 ) -> SeedPlan:
     """Stream meta → editions → works, stream matched reviews, select works with a
     long-tail floor, then embed/cluster/label each selected work's critical reviews.
@@ -134,8 +135,14 @@ def build_seed_plan(
     rating, text, helpful_vote, user_id, review_date). `embedder.encode(list[str])
     -> ndarray`; `labeler.label_cluster(list[str]) -> AspectResult(label, score,
     representative)`.
+
+    `on_progress_event(dict)` is an OPTIONAL structured sibling of `on_progress`
+    (Task 8): fired at the same existing log points with `{"step", "progress_pct",
+    "counts"}` so a UI/jobs-table consumer can show progress without parsing log
+    strings. Purely additive — does not change any seed math or counts.
     """
     _p = on_progress or (lambda _m: None)
+    _pe = on_progress_event or (lambda _e: None)
 
     # ---- Pass 1: subject-matched meta -> editions keyed by parent_asin ----
     edition_inputs: list[EditionInput] = []
@@ -147,6 +154,8 @@ def build_seed_plan(
             break
         if meta_scanned % 25_000 == 0:
             _p(f"meta scanned {meta_scanned:,} / {meta_limit:,} · subject editions {len(edition_inputs):,}")
+            _pe({"step": "meta", "progress_pct": round(40.0 * min(meta_scanned / meta_limit, 1.0), 1),
+                "counts": {"meta_scanned": meta_scanned, "subject_editions": len(edition_inputs)}})
         if not _subject_match(meta, subject_keywords):
             continue
         pa = meta.get("parent_asin")
@@ -159,6 +168,9 @@ def build_seed_plan(
     groups = group_editions(edition_inputs, trigram_threshold=trigram_threshold)
     _p(f"pass1 done: {len(edition_inputs):,} subject editions → {len(groups):,} works "
        f"(scanned {meta_scanned:,} meta rows)")
+    _pe({"step": "meta", "progress_pct": 40.0,
+        "counts": {"meta_scanned": meta_scanned, "subject_editions": len(edition_inputs),
+                   "works_total": len(groups)}})
     # parent_asin -> work normalized_key
     work_key_by_parent: dict[str, str] = {}
     for g in groups:
@@ -167,6 +179,8 @@ def build_seed_plan(
             work_key_by_parent[m.asin] = wkey
     matched_parents = set(work_key_by_parent)
     _p(f"matching reviews against {len(matched_parents):,} subject parent_asins…")
+    _pe({"step": "reviews", "progress_pct": 40.0,
+        "counts": {"subject_parent_asins": len(matched_parents)}})
 
     # ---- Pass 2: stream reviews, keep those for matched parents ----
     reviews_by_work: dict[str, list[object]] = {}
@@ -180,6 +194,10 @@ def build_seed_plan(
         if review_scanned % 200_000 == 0:
             _p(f"reviews scanned {review_scanned:,} / {review_limit:,} · "
                f"matched {matched_reviews:,} across {len(reviews_by_work):,} works")
+            _pe({"step": "reviews",
+                "progress_pct": round(40.0 + 40.0 * min(review_scanned / review_limit, 1.0), 1),
+                "counts": {"review_scanned": review_scanned, "matched_reviews": matched_reviews,
+                          "works_matched": len(reviews_by_work)}})
         pa = getattr(rv, "parent_asin", None) or getattr(rv, "asin", None)
         if pa not in matched_parents:
             continue
@@ -189,6 +207,9 @@ def build_seed_plan(
         ratings_by_work.setdefault(wkey, []).append(float(getattr(rv, "rating", 0) or 0))
     _p(f"pass2 done: {matched_reviews:,} matched reviews across {len(reviews_by_work):,} works "
        f"(scanned {review_scanned:,} review rows)")
+    _pe({"step": "reviews", "progress_pct": 80.0,
+        "counts": {"review_scanned": review_scanned, "matched_reviews": matched_reviews,
+                   "works_matched": len(reviews_by_work)}})
 
     # ---- Select works by CLUSTERABLE critical mass (PRD §6.1.4) ----
     # Clustering only ever consumes critical reviews (rating <= 3), so selection
@@ -212,6 +233,8 @@ def build_seed_plan(
     _p(f"selected {len(selected_keys):,} works (>= {min_critical_per_work} critical reviews, "
        f"long-tail floor) from {len(work_dicts):,} eligible / {len(reviews_by_work):,} matched "
        f"works; embedding/clustering now…")
+    _pe({"step": "nlp", "progress_pct": 80.0,
+        "counts": {"works_total": len(work_dicts), "works_selected": len(selected_keys)}})
 
     plan = SeedPlan()
     # work -> the group (for title/author/editions)
@@ -235,6 +258,9 @@ def build_seed_plan(
             continue
         _p(f"  work {wi}/{len(selected_keys)}: {(g.title or '')[:50]!r} "
            f"({len(reviews_by_work.get(wkey, [])):,} reviews)")
+        _pe({"step": "nlp",
+            "progress_pct": round(80.0 + 15.0 * (wi / len(selected_keys) if selected_keys else 1.0), 1),
+            "counts": {"work_index": wi, "works_selected": len(selected_keys)}})
         ratings = ratings_by_work.get(wkey, [])
         rating_avg = round(sum(ratings) / len(ratings), 2) if ratings else None
         plan.works.append(PlanWork(
@@ -297,6 +323,8 @@ def build_seed_plan(
                 pooled_reviews[i].cluster_local_id = int(local_id)
     _p(f"niche clustering: {len(plan.clusters):,} clusters from "
        f"{len(pooled_embeds):,} pooled critical reviews")
+    _pe({"step": "clustering", "progress_pct": 100.0,
+        "counts": {"clusters": len(plan.clusters), "pooled_reviews": len(pooled_embeds)}})
 
     plan.counts = {
         "meta_scanned": meta_scanned - 1 if meta_scanned else 0,

@@ -77,6 +77,45 @@ def seed_cmd(
     typer.secho(f"SEED OK — {counts}", fg=typer.colors.GREEN)
 
 
+@app.command("seed-job")
+def seed_job_cmd(
+    job_id: str = typer.Argument(..., help="jobs.id to report progress into"),
+    max_works: int = typer.Option(25, help="Cap on works selected for the seed."),
+    meta_limit: int = typer.Option(200_000, help="Max corpus meta rows to scan."),
+    review_limit: int = typer.Option(1_000_000, help="Max corpus review rows to scan."),
+) -> None:
+    """Run a seed and stream progress into the jobs table (Frontend PRD §3.1/§13.5).
+    Launched by the API as a SEPARATE SUBPROCESS — never runs inside the API
+    process/event loop, since the seed is CPU-heavy and can run ~1 hour."""
+    import asyncio
+    import uuid as _uuid
+
+    from api import jobs as jobs_svc
+    from lacuna.db.session import build_sessionmaker
+    from lacuna.seed.seed import run_seed
+
+    sm = build_sessionmaker()
+    jid = _uuid.UUID(job_id)
+
+    def cb(event: dict) -> None:
+        asyncio.run(jobs_svc.update_job(
+            sm, jid, status="running",
+            progress_pct=event.get("progress_pct"), step=event.get("step"),
+            counts=event.get("counts")))
+
+    asyncio.run(jobs_svc.update_job(sm, jid, status="running", progress_pct=0, step="starting"))
+    try:
+        counts = run_seed(rebuild=True, max_works=max_works, meta_limit=meta_limit,
+                          review_limit=review_limit, progress_cb=cb)
+        asyncio.run(jobs_svc.update_job(sm, jid, status="done", progress_pct=100,
+                                        counts=counts,
+                                        result_ref=str(counts.get("project_id", ""))))
+    except Exception as exc:  # noqa: BLE001 — record then re-raise for the subprocess exit code
+        asyncio.run(jobs_svc.update_job(sm, jid, status="error", error_detail=str(exc)))
+        raise
+    typer.secho(f"SEED-JOB OK — {counts}", fg=typer.colors.GREEN)
+
+
 @app.command("analyze")
 def analyze_cmd(
     isbn: str = typer.Option(None, help="ISBN to resolve."),

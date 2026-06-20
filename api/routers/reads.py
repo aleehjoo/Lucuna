@@ -54,6 +54,12 @@ async def work_detail(project_id: uuid.UUID, work_id: uuid.UUID, sm=Depends(get_
 @router.get("/clusters")
 async def list_clusters(project_id: uuid.UUID, scope: str = Query("work"),
                         ref: str | None = None, sm=Depends(get_sessionmaker)):
+    work_ref: uuid.UUID | None = None
+    if scope != "bisac" and ref:
+        try:
+            work_ref = uuid.UUID(ref)
+        except ValueError:
+            raise HTTPException(status_code=422, detail="ref must be a valid UUID")
     async with sm() as session:
         stmt = select(AspectCluster).where(AspectCluster.project_id == project_id)
         if scope == "bisac":
@@ -62,8 +68,8 @@ async def list_clusters(project_id: uuid.UUID, scope: str = Query("work"),
                 stmt = stmt.where(AspectCluster.bisac_code == ref)
         else:
             stmt = stmt.where(AspectCluster.work_id.is_not(None))
-            if ref:
-                stmt = stmt.where(AspectCluster.work_id == uuid.UUID(ref))
+            if work_ref is not None:
+                stmt = stmt.where(AspectCluster.work_id == work_ref)
         rows = (await session.execute(stmt)).scalars().all()
         return [_cluster_dict(c) for c in rows]
 

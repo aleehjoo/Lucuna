@@ -31,3 +31,12 @@ async def test_candidates_ranked_desc(client):
     cands = (await client.get(f"/projects/{pid}/candidates")).json()
     gaps = [c["gap_score"] for c in cands]
     assert gaps == sorted(gaps, reverse=True)
+
+
+async def test_clusters_malformed_ref_returns_422(client):
+    any_uuid = "00000000-0000-0000-0000-000000000000"
+    resp = await client.get(
+        f"/projects/{any_uuid}/clusters", params={"scope": "work", "ref": "not-a-uuid"}
+    )
+    assert resp.status_code == 422
+    assert "ref must be a valid UUID" in resp.json()["detail"]

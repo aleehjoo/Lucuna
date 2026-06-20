@@ -12,9 +12,10 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+import uuid as _uuid
 from pathlib import Path
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 
 from lacuna.aggregation.cross_platform import AspectClusterIn, agreement_pct, merge_clusters
 from lacuna.config import load_advanced, load_default
@@ -31,18 +32,30 @@ async def _load_project(session, name: str) -> Project | None:
     return (await session.execute(select(Project).where(Project.name == name))).scalar_one_or_none()
 
 
-async def distill_score_export(*, out: str = "pack.json", mode: str = "category_sweep") -> dict:
+async def _load_project_by_id(session, project_id) -> Project | None:
+    pid = project_id if isinstance(project_id, _uuid.UUID) else _uuid.UUID(str(project_id))
+    return (await session.execute(select(Project).where(Project.id == pid))).scalar_one_or_none()
+
+
+async def distill_score_export(*, out: str = "pack.json", mode: str = "category_sweep",
+                                project_id=None) -> dict:
     """Full corpus-only run. Returns a counts dict. Writes <out> (JSON) and the
-    Markdown twin alongside it."""
+    Markdown twin alongside it.
+
+    When `project_id` is given, resolves THAT project by id (multi-project export,
+    Frontend PRD §9 isolation). When None, falls back to the config-named project,
+    preserving the existing CLI behavior."""
     cfg = load_default()
     adv = load_advanced()
     project_name = cfg.get("project_name", "Lacuna Seed")
     sm = build_sessionmaker()
 
     async with sm() as session:
-        proj = await _load_project(session, project_name)
+        proj = (await _load_project_by_id(session, project_id) if project_id is not None
+                else await _load_project(session, project_name))
         if proj is None:
-            raise RuntimeError(f"project {project_name!r} not seeded yet — run `lacuna seed` first")
+            who = f"id {project_id}" if project_id is not None else repr(project_name)
+            raise RuntimeError(f"project {who} not seeded yet — run `lacuna seed` first")
         works = (await session.execute(
             select(Work).where(Work.project_id == proj.id))).scalars().all()
         clusters = (await session.execute(
@@ -105,6 +118,10 @@ async def distill_score_export(*, out: str = "pack.json", mode: str = "category_
     pack_candidates: list[PackCandidate] = []
     async with sm() as session:
         async with session.begin():
+            # Re-running the distiller for a project (e.g. re-export after a corpus
+            # change) must replace the prior snapshot, not violate the
+            # (project_id, scope, ref_id) unique constraint.
+            await session.execute(delete(Score).where(Score.project_id == proj.id))
             for r in results:
                 session.add(Score(
                     project_id=proj.id, scope=r.scope, ref_id=r.ref_id,
@@ -147,8 +164,9 @@ async def distill_score_export(*, out: str = "pack.json", mode: str = "category_
                 ))
 
     total_reviews = sum(review_counts.values())
+    pack_project_label = proj.name if project_id is not None else project_name
     pack = build_pack(
-        project=project_name, bisac=cfg.get("target_bisac", []), mode=mode,
+        project=pack_project_label, bisac=cfg.get("target_bisac", []), mode=mode,
         generated_at=dt.datetime.now(dt.timezone.utc).isoformat(),
         platforms_used=["amazon_corpus"], total_reviews=total_reviews,
         cross_platform_agreement_pct=round(agreement, 3), candidates=pack_candidates,

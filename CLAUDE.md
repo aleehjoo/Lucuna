@@ -6,6 +6,7 @@ Persistent operating instructions for Claude Code on this project. You are a **s
 - `Lacuna_PRD.md` is the authoritative spec. If any instruction — including this file — conflicts with the PRD on a build detail, the PRD wins, but **flag the conflict; do not silently pick one.**
 - Read `Lacuna_PRD.md` in full at the start of any **planning or execution** session, and whenever you're unsure about scope, schema, or sequence. You don't need to re-read it for a trivial one-file fix.
 - Do **not** duplicate or restate the PRD here. Reference it by section (e.g. "per §10").
+- `Lacuna_Frontend_PRD.md` is the authoritative spec for the **frontend/product surface** (Path B). The same rules apply: it wins on frontend build details, but flag conflicts — including any between the two PRDs — rather than silently picking one. The engine PRD still governs the engine; the frontend PRD explicitly does **not** rebuild it.
 
 ## 2. Judgment Before Execution
 Before acting on any instruction, ask: Is this the right move right now? Does it conflict with the PRD? Will it cost more to undo than it saves?
@@ -49,6 +50,18 @@ If asked to work out of this order, invoke §2 — flag it and confirm before pr
 - **Context7:** before writing non-trivial calls against any external library, pull its **live docs** instead of relying on training data — especially `hdbscan`, `sentence-transformers`, `supabase-py`, `alembic`, and `streamlit`. The list is illustrative; apply it to any library whose current API you're unsure of.
 - **Sequential Thinking:** use it for the reasoning-heavy steps — the scoring math (F, PRD §10) and the cross-platform aggregation logic (G, PRD §9) — where a skipped step produces silently wrong output.
 - **Superpowers:** brainstorming is already done (the PRD is the signed-off design). Enter at `write-plan`, then `execute-plan`. If you drift from these skills mid-session, re-anchor with `/using-superpowers`.
+
+## 7. Frontend Build (Lacuna_Frontend_PRD.md)
+The engine is finished; this is the product surface on top of it. Read `Lacuna_Frontend_PRD.md` in full before any frontend planning/execution session (same rule as §1).
+
+- **Fixed stack — do not improvise an alternative.** Backend: **FastAPI** wrapping the `lacuna` package as a REST API. Frontend: **Next.js (App Router) + TypeScript + Tailwind**, TanStack Query for server state + job polling. No other framework, router, or styling system without flagging first (§2).
+- **Engine is reused via import, never rewritten.** The backend *calls* existing adapters / NLP / scoring / export / seed. If a behavior is missing, add a thin new layer that composes the engine — do not reimplement it. The only genuinely new engine code is the live single-title glue (`lacuna/pipeline/live_single_title.py`, Frontend PRD §3.2).
+- **Two execution models — never merge them (Frontend PRD §1.2):** the **corpus is batch-only** (operator seed, ~1h subprocess) and the **Hardcover layer is live** (user search, seconds). The corpus is **never** queried live in response to a user search. Any design that makes a user wait on a corpus scan is wrong.
+- **The Conflict Register (Frontend PRD §13) is binding.** Honor all 12 locked decisions; per §2, flag before deviating from any of them rather than quietly working around one.
+- **Use the `frontend-design` skill for all UI.** No default-template styling ships.
+- **W4 live-search gate (Frontend PRD §16):** the live single-title path must work and be verified against a **real title** before any UI that depends on it (W6 Search) is built. This mirrors the engine's G0 discipline — do not build search UI on an unproven live path.
+- **Tooling:** pull live docs via Context7 for **FastAPI, Next.js, TanStack Query, and Recharts** before writing non-trivial calls (extends §6).
+- **Secrets & schema:** the frontend holds **no keys** — all source/engine calls proxy through the backend (carry §5). The only schema addition is the `jobs` table (Frontend PRD §5); reuse all existing tables and `project_id` isolation.
 
 ---
 *Default posture: disciplined senior engineer. Flag before executing anything questionable; verify before you write or push. When in doubt, ask — one good question now beats an hour of rework later.*

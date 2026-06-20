@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Fraunces, Inter, IBM_Plex_Mono } from "next/font/google";
 import "./globals.css";
+import { Providers } from "./providers";
 
 const fraunces = Fraunces({
   variable: "--font-fraunces",
@@ -36,7 +37,7 @@ export default function RootLayout({
       <body
         className={`${fraunces.variable} ${inter.variable} ${plexMono.variable} min-h-full flex flex-col`}
       >
-        {children}
+        <Providers>{children}</Providers>
       </body>
     </html>
   );

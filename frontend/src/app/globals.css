@@ -1,26 +1,26 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --ink: #16202B;
+  --paper: #F5F4EF;
+  --panel: #FFFFFF;
+  --ultramarine: #27408B;
+  --gold-leaf: #B8860B;
+  --oxblood: #8C2F2A;
+  --border: color-mix(in srgb, var(--ink) 12%, transparent);
+  --muted: color-mix(in srgb, var(--ink) 55%, transparent);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-inter), system-ui, sans-serif;
+}
+h1, h2, .display { font-family: var(--font-fraunces), Georgia, serif; }
+.mono, .data { font-family: var(--font-plex-mono), ui-monospace, monospace; }
+
+*:focus-visible { outline: 2px solid var(--ultramarine); outline-offset: 2px; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }

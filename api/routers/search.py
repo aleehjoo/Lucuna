@@ -72,12 +72,17 @@ async def start_search(project_id: uuid.UUID, body: SearchRequest,
     seeded = await _seeded_clusters_for(sm, project_id, title)
 
     await jobs_svc.update_job(sm, job_id, status="running", progress_pct=5, step="resolving")
-    client = HardcoverClient(token=token)
     try:
         def _run():
-            return asyncio.run(analyze_live(
-                title=title, hardcover=client, embedder=runtime.embedder,
-                labeler=runtime.labeler, seeded_clusters=seeded or None))
+            async def _drive():
+                client = HardcoverClient(token=token)
+                try:
+                    return await analyze_live(
+                        title=title, hardcover=client, embedder=runtime.embedder,
+                        labeler=runtime.labeler, seeded_clusters=seeded or None)
+                finally:
+                    await client.aclose()
+            return asyncio.run(_drive())
         result = await run_in_threadpool(_run)
         await jobs_svc.update_job(
             sm, job_id, status="done", progress_pct=100,
@@ -86,7 +91,5 @@ async def start_search(project_id: uuid.UUID, body: SearchRequest,
                     "pack": result["pack"]})
     except Exception as exc:  # noqa: BLE001
         await jobs_svc.update_job(sm, job_id, status="error", error_detail=str(exc))
-    finally:
-        await client.aclose()
 
     return {"job_id": str(job_id)}

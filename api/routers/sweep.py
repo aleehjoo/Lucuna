@@ -21,19 +21,23 @@ def _run_sweep_sync(job_id: uuid.UUID, project_id: uuid.UUID) -> None:
     Builds its OWN sessionmaker/engine — the request that scheduled this has
     already returned, so its session/connection must not be reused here. Drives
     the distiller via its own asyncio event loop (this thread has none)."""
-    from lacuna.db.session import build_sessionmaker
+    from lacuna.db.session import build_engine, build_sessionmaker
 
-    job_sm = build_sessionmaker()
+    engine = build_engine()
+    job_sm = build_sessionmaker(engine)
     try:
-        with tempfile.TemporaryDirectory() as d:
-            out = str(Path(d) / "pack.json")
-            counts = asyncio.run(distill_score_export(
-                out=out, mode="category_sweep", project_id=str(project_id)))
-        asyncio.run(jobs_svc.update_job(
-            job_sm, job_id, status="done", progress_pct=100, counts=counts))
-    except Exception as exc:  # noqa: BLE001
-        asyncio.run(jobs_svc.update_job(
-            job_sm, job_id, status="error", error_detail=str(exc)))
+        try:
+            with tempfile.TemporaryDirectory() as d:
+                out = str(Path(d) / "pack.json")
+                counts = asyncio.run(distill_score_export(
+                    out=out, mode="category_sweep", project_id=str(project_id)))
+            asyncio.run(jobs_svc.update_job(
+                job_sm, job_id, status="done", progress_pct=100, counts=counts))
+        except Exception as exc:  # noqa: BLE001
+            asyncio.run(jobs_svc.update_job(
+                job_sm, job_id, status="error", error_detail=str(exc)))
+    finally:
+        asyncio.run(engine.dispose())
 
 
 @router.post("/sweep")

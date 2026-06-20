@@ -235,3 +235,18 @@ The seed clusters **only critical reviews** (rating ≤ 3) per work, but work se
 **Fix (`orchestrator.py`, `min_critical_per_work` in `advanced.yaml`, default 5):** selection now ranks works by **critical-review count**, and a work is **ineligible** unless it has at least `min_critical_per_work` critical reviews. Reviews therefore concentrate on works that can actually form a cluster, instead of smearing thinly across many that cannot.
 
 **Deviation from PRD §6.5 (approved, deliberate).** §6.5 instructs the seed to "deliberately include the long tail" of low-review works to keep survivorship bias from re-entering at ingestion. Excluding works below the critical-review floor **narrows** that tail — the very-thinnest works are dropped. The justification: a work with fewer than `min_critical_per_work` critical reviews yields **no cluster at all**, only orphaned HDBSCAN noise, so including it adds nothing to the distilled output while diluting the review budget away from clusterable works. The long-tail floor (`longtail_share`) still operates **within** the eligible (clusterable) band — works in `[min_critical_per_work, min_sample_gate)` are the long tail now — so the §6.5 intent (do not select by popularity alone) is preserved among works that can produce signal. The floor is **never** lowered to manufacture clusters; if too few works qualify, the correct response is to scan more review rows (`--review-limit`), not to admit unclusterable works.
+
+## 16. W4 Live-Search Gate — Passed (2026-06-20)
+
+The Frontend PRD §16 gate (mirrors engine G0) was run manually against the **real Hardcover API** and **real local NLP models** (no mocks) via `tests/test_live_search_gate.py::test_live_search_produces_real_result_for_known_title`. Result: **PASS**.
+
+- **Title resolved:** "Atomic habits: An Easy & Proven Way to Build Good Habits & Break Bad Ones" (from query `"Atomic Habits"`, via Hardcover's Typesense-backed `search()`, same canonical-edition resolution as §13).
+- **`review_count`:** 50 live reviews pulled; 13 were critical (rating ≤ 3) and entered local clustering.
+- **`fresh_only`:** `true` — no seeded corpus clusters existed for this title, so the path ran fresh-Hardcover-only, as expected for an unseeded niche.
+- **Provenance honesty:** the single resulting candidate carries `validity.incomplete = true` (fresh-only path), `confidence = 0.2`, `sample_size = 13`, `platforms = ["hardcover"]` — correctly down-weighted per §9/§4 rather than presented as a complete result.
+- **Clusters:** 0 aspect clusters formed in this run (13 critical reviews is close to HDBSCAN's `min_cluster_size` floor; cluster formation on small fresh batches is expected to be sparse/variable run-to-run — this does not affect gate pass/fail, which asserts pack/candidate shape and the `incomplete` flag, not cluster count).
+- **Elapsed:** ~16-22s wall-clock per run (models load from local cache, no fresh multi-GB download; Hardcover network round-trip + local embed/cluster/label).
+
+**HTTP end-to-end confirmation (best-effort, also passed):** started the FastAPI backend (`uvicorn api.app:create_app --factory`) against the real Supabase DB and real Hardcover token; `GET /health` reported `models_ready: true`; `POST /projects/<real-project-id>/search {"title":"Atomic Habits"}` returned a `job_id`; `GET /jobs/<job_id>` reached `status: done` within ~1-2s of polling with `counts.review_count = 50`, `fresh_only: true`, `validity.incomplete: true` — confirming the corpus was not scanned and the live single-title path is wired correctly end-to-end over HTTP, not just at the pipeline-function level.
+
+Gate green — Plan B (frontend, W5+) may proceed.

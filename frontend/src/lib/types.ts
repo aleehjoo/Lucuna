@@ -202,3 +202,12 @@ export interface SeedRequestBody {
 export interface JobIdResponse {
   job_id: string;
 }
+
+// ---------------------------------------------------------------------------
+// Health (api/app.py: GET /health)
+// ---------------------------------------------------------------------------
+
+export interface HealthOut {
+  status: "ok" | "warming";
+  models_ready: boolean;
+}

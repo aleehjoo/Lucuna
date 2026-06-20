@@ -9,6 +9,7 @@ import {
 import { api } from "./api";
 import type {
   CandidateOut,
+  HealthOut,
   JobIdResponse,
   JobOut,
   ProjectOut,
@@ -30,6 +31,25 @@ export function jobRefetchInterval(
 ): number | false {
   const status = query.state.data?.status;
   return status === "done" || status === "error" ? false : 1500;
+}
+
+// ---------------------------------------------------------------------------
+// Health polling — mirrors jobRefetchInterval's shape: exported standalone so
+// the stop condition (models warmed up) is unit-testable without mounting a
+// component. Polls every 5s until models_ready, then stops.
+// ---------------------------------------------------------------------------
+export function healthRefetchInterval(
+  query: Query<HealthOut, Error, HealthOut, readonly [string]>,
+): number | false {
+  return query.state.data?.models_ready ? false : 5000;
+}
+
+export function useHealth() {
+  return useQuery({
+    queryKey: ["health"] as const,
+    queryFn: () => api.get<HealthOut>("/health"),
+    refetchInterval: healthRefetchInterval,
+  });
 }
 
 export const useProjects = () =>

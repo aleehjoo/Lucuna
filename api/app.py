@@ -40,8 +40,8 @@ def create_app(*, runtime: EngineRuntime | None = None, sessionmaker=None) -> Fa
         ready = app.state.runtime is not None
         return {"status": "ok" if ready else "warming", "models_ready": ready}
 
-    from api.routers import export, projects, reads, seed
-    for r in (projects, reads, export, seed):
+    from api.routers import export, jobs, projects, reads, seed, sweep
+    for r in (projects, reads, export, seed, jobs, sweep):
         app.include_router(r.router)
 
     return app

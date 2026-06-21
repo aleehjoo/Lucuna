@@ -4,6 +4,18 @@
 
 const BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000";
 
+// Carries the HTTP status alongside the backend's `detail` message so
+// callers can distinguish e.g. 404 ("not found" -> EmptyState) from other
+// failures ("something broke" -> ErrorState + retry) without parsing prose.
+export class ApiError extends Error {
+  status: number;
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+  }
+}
+
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     ...init,
@@ -11,7 +23,7 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
   });
   if (!res.ok) {
     const detail = await res.json().catch(() => ({}));
-    throw new Error(detail?.detail ?? `Request failed: ${res.status}`);
+    throw new ApiError(detail?.detail ?? `Request failed: ${res.status}`, res.status);
   }
   if (res.status === 204) return undefined as T;
   const ct = res.headers.get("content-type") ?? "";

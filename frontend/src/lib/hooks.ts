@@ -9,11 +9,13 @@ import {
 import { api } from "./api";
 import type {
   CandidateOut,
+  ClusterOut,
   HealthOut,
   JobIdResponse,
   JobOut,
   ProjectCreateBody,
   ProjectOut,
+  ScoreScope,
   SearchRequestBody,
   SeedRequestBody,
   WorkDetailOut,
@@ -129,4 +131,23 @@ export const useWork = (projectId: string | null, workId: string | null) =>
     queryKey: ["work", projectId, workId],
     enabled: !!projectId && !!workId,
     queryFn: () => api.get<WorkDetailOut>(`/projects/${projectId}/works/${workId}`),
+  });
+
+// scope="bisac" -> niche-level clusters (work_id NULL): the corpus-wide
+// complaint signal for the whole category. scope="work" -> a single work's
+// clusters when `ref` is its work id (GET /projects/{id}/works/{id} already
+// inlines these; this hook exists for the bisac case the dashboard needs).
+export const useClusters = (
+  id: string | null,
+  scope: ScoreScope,
+  ref?: string,
+) =>
+  useQuery({
+    queryKey: ["clusters", id, scope, ref ?? null],
+    enabled: !!id,
+    queryFn: () => {
+      const qs = new URLSearchParams({ scope });
+      if (ref) qs.set("ref", ref);
+      return api.get<ClusterOut[]>(`/projects/${id}/clusters?${qs.toString()}`);
+    },
   });

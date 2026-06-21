@@ -114,12 +114,23 @@ export interface LiveSearchClusterOut {
   cross_platform: boolean;
 }
 
+/** Counts per star band 1-5, keyed by the string "1".."5" — see
+ * lacuna/pipeline/live_single_title.py::_rating_summary for the bucketing
+ * rule (floor each rating to its star, clamped to [1, 5]). */
+export type RatingDistribution = Record<"1" | "2" | "3" | "4" | "5", number>;
+
 export interface LiveSearchCounts {
   title: string;
   review_count: number;
   fresh_only: boolean;
   agreement_pct: number;
   clusters: LiveSearchClusterOut[];
+  /** Mean of all reviews carrying a non-null rating, rounded to 2dp; null
+   * when no review in the pulled set has a rating. */
+  rating_avg: number | null;
+  /** Number of reviews (out of review_count) that carry a rating. */
+  rating_count: number;
+  rating_distribution: RatingDistribution;
   pack: ContextPack;
   /** Only present (true) when Hardcover couldn't resolve the title/ISBN at all. */
   not_found?: boolean;

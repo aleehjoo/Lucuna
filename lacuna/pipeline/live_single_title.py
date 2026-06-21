@@ -15,12 +15,33 @@ only (CLAUDE.md §3)."""
 from __future__ import annotations
 
 import datetime as dt
+import math
 
 from lacuna.aggregation.cross_platform import (
     AspectClusterIn, MergedCluster, agreement_pct, merge_clusters,
 )
 from lacuna.export.context_pack import Candidate, Complaint, build_pack
 from lacuna.nlp.clustering import cluster_embeddings, members_by_cluster
+
+
+def _rating_summary(reviews) -> dict:
+    """Aggregate the star rating across ALL reviews pulled for the book (not just
+    the critical subset used for clustering) — purely local arithmetic over
+    `.rating` floats already in memory, no new calls and no raw text involved.
+
+    Bucketing: each non-null rating is floored to its star band via
+    `min(5, max(1, floor(r)))` — so a 4.7 buckets as "4-star" (it hasn't
+    reached 5 yet) and anything <= 1 (including edge-case 0s) floors into the
+    "1-star" bucket. This is the common "floor toward the star you've
+    actually earned" convention used by most review-platform histograms.
+    """
+    rated = [float(r.rating) for r in reviews if r.rating is not None]
+    distribution = {str(star): 0 for star in range(1, 6)}
+    for r in rated:
+        star = min(5, max(1, math.floor(r)))
+        distribution[str(star)] += 1
+    avg = round(sum(rated) / len(rated), 2) if rated else None
+    return {"rating_avg": avg, "rating_count": len(rated), "rating_distribution": distribution}
 
 
 async def analyze_live(*, title: str, hardcover, embedder, labeler,
@@ -36,6 +57,8 @@ async def analyze_live(*, title: str, hardcover, embedder, labeler,
     if book is None:
         return {"title": title, "fresh_only": not seeded_clusters, "review_count": 0,
                 "clusters": [], "agreement_pct": 0.0, "not_found": True,
+                "rating_avg": None, "rating_count": 0,
+                "rating_distribution": {str(star): 0 for star in range(1, 6)},
                 "pack": build_pack(project=title, bisac=[], mode="single_title",
                                    generated_at=dt.datetime.now(dt.timezone.utc).isoformat(),
                                    platforms_used=[], total_reviews=0,
@@ -98,6 +121,10 @@ async def analyze_live(*, title: str, hardcover, embedder, labeler,
         platforms_used=cand.platforms, total_reviews=len(texts),
         cross_platform_agreement_pct=round(agreement, 3), candidates=[cand], max_candidates=15)
 
+    rating = _rating_summary(book.reviews)
+
     _tick("done", 100.0)
     return {"title": book.title, "fresh_only": fresh_only, "review_count": review_count,
-            "clusters": cluster_view, "agreement_pct": round(agreement, 3), "pack": pack}
+            "clusters": cluster_view, "agreement_pct": round(agreement, 3),
+            "rating_avg": rating["rating_avg"], "rating_count": rating["rating_count"],
+            "rating_distribution": rating["rating_distribution"], "pack": pack}

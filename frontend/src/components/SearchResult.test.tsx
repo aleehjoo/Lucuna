@@ -48,6 +48,9 @@ function emptyClustersCounts(): LiveSearchCounts {
     fresh_only: true,
     agreement_pct: 0,
     clusters: [],
+    rating_avg: 4.2,
+    rating_count: 13,
+    rating_distribution: { "1": 1, "2": 1, "3": 2, "4": 4, "5": 5 },
     pack: pack(),
   };
 }
@@ -60,6 +63,9 @@ function withClustersCounts(): LiveSearchCounts {
     review_count: 240,
     fresh_only: false,
     agreement_pct: 0.62,
+    rating_avg: 4.5,
+    rating_count: 60,
+    rating_distribution: { "1": 2, "2": 3, "3": 5, "4": 20, "5": 30 },
     clusters: [
       {
         label: "pacing drags in the middle chapters",
@@ -95,10 +101,21 @@ describe("SearchResult", () => {
   it("(a) clusters empty: renders rating/review-count/provenance + fresh_only and low_signal framing — NOT as a failure or empty state", () => {
     render(<SearchResult counts={emptyClustersCounts()} />);
 
+    // Rating summary leads the result, above the title/provenance section.
+    const ratingFigure = screen.getByText("4.2");
+    expect(ratingFigure).toBeInTheDocument();
+    expect(screen.getByText(/from 13 rated reviews/)).toBeInTheDocument();
+
     // Resolved title + sample size are present.
     expect(screen.getByText("Atomic Habits")).toBeInTheDocument();
     expect(screen.getByText(/50 reviews pulled live from Hardcover/)).toBeInTheDocument();
     expect(screen.getByText(/13 critical/)).toBeInTheDocument();
+
+    // Rating summary renders ABOVE (precedes in document order) the title.
+    const title = screen.getByText("Atomic Habits");
+    expect(
+      ratingFigure.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
 
     // Provenance: platform + fresh-only framing.
     expect(screen.getByText("hardcover")).toBeInTheDocument();
@@ -124,6 +141,9 @@ describe("SearchResult", () => {
 
   it("(b) clusters present: renders the bonus cluster section below the summary", () => {
     render(<SearchResult counts={withClustersCounts()} />);
+
+    expect(screen.getByText("4.5")).toBeInTheDocument();
+    expect(screen.getByText(/from 60 rated reviews/)).toBeInTheDocument();
 
     expect(screen.getByText("Deep Work")).toBeInTheDocument();
     expect(
@@ -154,6 +174,9 @@ describe("SearchResult", () => {
       fresh_only: true,
       agreement_pct: 0,
       clusters: [],
+      rating_avg: null,
+      rating_count: 0,
+      rating_distribution: { "1": 0, "2": 0, "3": 0, "4": 0, "5": 0 },
       not_found: true,
       pack: pack(),
     };
@@ -161,5 +184,20 @@ describe("SearchResult", () => {
     render(<SearchResult counts={counts} />);
 
     expect(screen.getByText("Couldn't resolve that title")).toBeInTheDocument();
+  });
+
+  it("shows an honest 'no ratings available' line instead of a fabricated 0 when rating_avg is null", () => {
+    const counts: LiveSearchCounts = {
+      ...emptyClustersCounts(),
+      rating_avg: null,
+      rating_count: 0,
+      rating_distribution: { "1": 0, "2": 0, "3": 0, "4": 0, "5": 0 },
+    };
+
+    render(<SearchResult counts={counts} />);
+
+    expect(screen.getByText("No ratings available.")).toBeInTheDocument();
+    expect(screen.queryByText("0 / 5")).not.toBeInTheDocument();
+    expect(screen.queryByText(/from 0 rated review/)).not.toBeInTheDocument();
   });
 });

@@ -38,6 +38,9 @@ function freshOnlyCounts(): LiveSearchCounts {
     fresh_only: true,
     agreement_pct: 0,
     clusters: [],
+    rating_avg: 4.2,
+    rating_count: 13,
+    rating_distribution: { "1": 1, "2": 1, "3": 2, "4": 4, "5": 5 },
     pack: {
       legend: {},
       instructions_to_model: {},

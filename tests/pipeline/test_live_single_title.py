@@ -51,6 +51,12 @@ async def test_live_analysis_fresh_only_builds_pack():
     assert "candidates" in result["pack"]
     assert result["agreement_pct"] == 0.0  # single platform -> no cross-platform agreement
 
+    # Ratings: 2, 1, 2 -> avg 1.67, all 3 carry a rating, bucketed by floor(r)
+    # clamped to [1, 5]: two reviews floor to "2", one floors to "1".
+    assert result["rating_avg"] == 1.67
+    assert result["rating_count"] == 3
+    assert result["rating_distribution"] == {"1": 1, "2": 2, "3": 0, "4": 0, "5": 0}
+
 
 async def test_live_analysis_merges_with_seeded_raises_agreement():
     # Real HDBSCAN (via cluster_embeddings) needs a density CONTRAST between >=2
@@ -73,3 +79,19 @@ async def test_live_analysis_merges_with_seeded_raises_agreement():
     assert result["fresh_only"] is False
     # the merged "outdated" cluster now spans hardcover + amazon_corpus
     assert any(c.get("cross_platform") for c in result["clusters"])
+
+
+async def test_live_analysis_no_rated_reviews_yields_null_average():
+    # All reviews carry no rating at all (rating=None) -- the rating summary
+    # must report an honest null average, not a fabricated 0.
+    book = FakeHardcoverBook("Unrated Title", [
+        FakeHardcoverReview(None, "the examples are outdated and old"),
+        FakeHardcoverReview(None, "outdated material throughout the book"),
+    ])
+    result = await analyze_live(
+        title="Unrated Title", hardcover=FakeHardcover(book),
+        embedder=FakeEmbedder(), labeler=FakeLabeler(),
+        seeded_clusters=None, cluster_min_size=2)
+    assert result["rating_avg"] is None
+    assert result["rating_count"] == 0
+    assert result["rating_distribution"] == {"1": 0, "2": 0, "3": 0, "4": 0, "5": 0}

@@ -88,6 +88,8 @@ async def start_search(project_id: uuid.UUID, body: SearchRequest,
             sm, job_id, status="done", progress_pct=100,
             counts={"review_count": result["review_count"], "fresh_only": result["fresh_only"],
                     "agreement_pct": result["agreement_pct"], "clusters": result["clusters"],
+                    "rating_avg": result["rating_avg"], "rating_count": result["rating_count"],
+                    "rating_distribution": result["rating_distribution"],
                     "pack": result["pack"]})
     except Exception as exc:  # noqa: BLE001
         await jobs_svc.update_job(sm, job_id, status="error", error_detail=str(exc))

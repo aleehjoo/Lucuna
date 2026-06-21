@@ -18,6 +18,7 @@ export interface ProjectOut {
   name: string;
   target_bisac: string[];
   subject_filter: Record<string, unknown>;
+  config: Record<string, unknown>;
   seeded: boolean;
   work_count: number;
   cluster_count: number;
@@ -219,6 +220,15 @@ export interface ProjectCreateBody {
   target_bisac: string[];
   subject_filter: Record<string, unknown>;
   config: Record<string, unknown>;
+}
+
+/** PUT /projects/{id} body (api/schemas.py: ProjectUpdate) — partial update;
+ * only provided fields are written. Settings sends `{ config }` only. */
+export interface ProjectUpdateBody {
+  name?: string;
+  target_bisac?: string[];
+  subject_filter?: Record<string, unknown>;
+  config?: Record<string, unknown>;
 }
 
 export interface JobIdResponse {

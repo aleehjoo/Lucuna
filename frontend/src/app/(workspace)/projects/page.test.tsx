@@ -20,6 +20,7 @@ function project(overrides: Partial<ProjectOut> = {}): ProjectOut {
     name: "Stoicism & Philosophy",
     target_bisac: ["FIC044000"],
     subject_filter: {},
+    config: {},
     seeded: true,
     work_count: 42,
     cluster_count: 7,

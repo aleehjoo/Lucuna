@@ -20,7 +20,7 @@ async def _project_out(session, p: Project) -> ProjectOut:
         select(func.count()).select_from(AspectCluster).where(AspectCluster.project_id == p.id))).scalar_one()
     return ProjectOut(
         id=str(p.id), name=p.name, target_bisac=list(p.target_bisac or []),
-        subject_filter=p.subject_filter or {}, seeded=wc > 0,
+        subject_filter=p.subject_filter or {}, config=p.config or {}, seeded=wc > 0,
         work_count=wc, cluster_count=cc,
         created_at=p.created_at.isoformat() if p.created_at else None)
 

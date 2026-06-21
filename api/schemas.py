@@ -27,6 +27,7 @@ class ProjectOut(BaseModel):
     name: str
     target_bisac: list[str]
     subject_filter: dict
+    config: dict
     seeded: bool
     work_count: int
     cluster_count: int

@@ -24,8 +24,9 @@ async def test_create_list_get_delete_project(client):
     updated = (await client.put(f"/projects/{pid}",
                                 json={"config": {"timely_evergreen": 0.7}})).json()
     assert updated["id"] == pid
+    assert updated["config"] == {"timely_evergreen": 0.7}
     refetched = (await client.get(f"/projects/{pid}")).json()
-    assert refetched["id"] == pid  # config round-trips (not surfaced in ProjectOut, but persisted)
+    assert refetched["config"] == {"timely_evergreen": 0.7}  # config round-trips and is surfaced in ProjectOut
 
     assert (await client.delete(f"/projects/{pid}")).status_code == 204
     assert (await client.get(f"/projects/{pid}")).status_code == 404

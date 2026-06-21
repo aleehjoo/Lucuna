@@ -21,6 +21,7 @@ function project(overrides: Partial<ProjectOut> = {}): ProjectOut {
     name: "Programming",
     target_bisac: ["COM051000"],
     subject_filter: {},
+    config: {},
     seeded: false,
     work_count: 0,
     cluster_count: 0,

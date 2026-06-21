@@ -15,6 +15,7 @@ import type {
   JobOut,
   ProjectCreateBody,
   ProjectOut,
+  ProjectUpdateBody,
   ScoreScope,
   SearchRequestBody,
   SeedRequestBody,
@@ -76,6 +77,22 @@ export function useCreateProject() {
     mutationFn: (body: ProjectCreateBody) =>
       api.post<ProjectOut>("/projects", body),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["projects"] }),
+  });
+}
+
+// Partial update (PUT /projects/{id}) — backs Settings (Frontend PRD §10):
+// the UI only ever sends `{ config }` with intent knobs, never correctness
+// knobs (§13.10). Invalidates both the single-project cache and the list
+// (work_count/cluster_count-bearing summaries) so callers see fresh data.
+export function useUpdateProject(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: ProjectUpdateBody) =>
+      api.put<ProjectOut>(`/projects/${id}`, body),
+    onSuccess: (data) => {
+      qc.setQueryData(["project", id], data);
+      qc.invalidateQueries({ queryKey: ["projects"] });
+    },
   });
 }
 

@@ -5,6 +5,7 @@ import { Card } from "@/components/ui/Card";
 import { Chip } from "@/components/ui/Chip";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { FlagBadge } from "@/components/ui/FlagBadge";
+import { HypothesisBanner } from "@/components/HypothesisBanner";
 import { AgreementGauge } from "@/components/charts/AgreementGauge";
 import { AspectFrequency } from "@/components/charts/AspectFrequency";
 import { ProvenanceChips } from "@/components/charts/ProvenanceChips";
@@ -44,6 +45,8 @@ export function SearchResult({ counts }: { counts: LiveSearchCounts }) {
 
   return (
     <div className="flex flex-col gap-6">
+      <HypothesisBanner />
+
       {/* 1. Rating summary — LEADS the result. Honest "no ratings available"
           when rating_avg is null; never a fabricated 0. */}
       <Card className="flex flex-col gap-3">

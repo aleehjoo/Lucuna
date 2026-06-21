@@ -105,6 +105,24 @@ export function useJob(jobId: string | null) {
   });
 }
 
+// Cancels a running/queued job (Frontend PRD §11 — "allow cancelling a
+// running live-search job"). POST /jobs/{id}/cancel records status='error',
+// error_detail='cancelled' (a terminal state JobStatus already renders as
+// "Cancelled", not a failure) — once that lands in the cache, useJob's
+// jobRefetchInterval sees a terminal status and stops polling on its own; no
+// separate "stop polling" call needed. Seeds the ["job", jobId] cache
+// directly with the response so the UI flips to Cancelled immediately,
+// without waiting for the next poll tick.
+export function useCancelJob(jobId: string | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.post<JobOut>(`/jobs/${jobId}/cancel`),
+    onSuccess: (data) => {
+      if (jobId) qc.setQueryData(["job", jobId], data);
+    },
+  });
+}
+
 // Recent jobs for a project (GET /projects/{id}/jobs) — backs the Seed &
 // Data operator surface's "in-flight job on mount" auto-resume and its past-
 // jobs history (Plan B Task 11). Not polled by default: the page composes

@@ -1,12 +1,14 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { useJob, useStartSearch } from "@/lib/hooks";
+import { useCancelJob, useJob, useStartSearch } from "@/lib/hooks";
+import { ApiError } from "@/lib/api";
 import type { JobOut, LiveSearchCounts } from "@/lib/types";
 import SearchPage from "./page";
 
 vi.mock("@/lib/hooks", () => ({
   useStartSearch: vi.fn(),
   useJob: vi.fn(),
+  useCancelJob: vi.fn(),
 }));
 
 vi.mock("next/navigation", () => ({
@@ -15,6 +17,7 @@ vi.mock("next/navigation", () => ({
 
 const mockUseStartSearch = useStartSearch as unknown as ReturnType<typeof vi.fn>;
 const mockUseJob = useJob as unknown as ReturnType<typeof vi.fn>;
+const mockUseCancelJob = useCancelJob as unknown as ReturnType<typeof vi.fn>;
 
 function job(overrides: Partial<JobOut> = {}): JobOut {
   return {
@@ -75,6 +78,8 @@ function freshOnlyCounts(): LiveSearchCounts {
 beforeEach(() => {
   mockUseStartSearch.mockReset();
   mockUseJob.mockReset();
+  mockUseCancelJob.mockReset();
+  mockUseCancelJob.mockReturnValue({ mutate: vi.fn(), isPending: false });
 });
 
 describe("SearchPage", () => {
@@ -145,5 +150,91 @@ describe("SearchPage", () => {
     });
     expect(screen.getByText("Fresh only")).toBeInTheDocument();
     expect(screen.getByText(/low signal: 50 reviews/)).toBeInTheDocument();
+  });
+
+  it("carries the hypothesis-not-a-finding posture on a rendered result", async () => {
+    const mutateAsync = vi.fn().mockResolvedValue({ job_id: "job-1" });
+    mockUseStartSearch.mockReturnValue({ mutateAsync, isPending: false });
+    mockUseJob.mockReturnValue({
+      data: job({ counts: freshOnlyCounts() as unknown as Record<string, unknown> }),
+      isLoading: false,
+    });
+
+    render(<SearchPage />);
+
+    fireEvent.change(screen.getByPlaceholderText("Search a book title or ISBN"), {
+      target: { value: "Atomic Habits" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Search" }));
+
+    await vi.waitFor(() => {
+      expect(
+        screen.getByText(/treat each candidate as a hypothesis, not a finding/i),
+      ).toBeInTheDocument();
+    });
+  });
+
+  it("maps a 503 (Hardcover not configured) to a quiet, non-alarming notice, not a raw error", async () => {
+    const mutateAsync = vi
+      .fn()
+      .mockRejectedValue(new ApiError("HARDCOVER_API_TOKEN not configured on the backend", 503));
+    mockUseStartSearch.mockReturnValue({ mutateAsync, isPending: false });
+    mockUseJob.mockReturnValue({ data: undefined, isLoading: false });
+
+    render(<SearchPage />);
+
+    fireEvent.change(screen.getByPlaceholderText("Search a book title or ISBN"), {
+      target: { value: "Atomic Habits" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Search" }));
+
+    await vi.waitFor(() => {
+      expect(
+        screen.getByText(
+          "Live search isn't available — the Hardcover key isn't configured on this instance.",
+        ),
+      ).toBeInTheDocument();
+    });
+    // Not rendered via the oxblood "something broke" path — the raw backend
+    // detail string never reaches the screen.
+    expect(
+      screen.queryByText("HARDCOVER_API_TOKEN not configured on the backend"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("allows cancelling a running live-search job, which moves to the Cancelled state with no dead end", async () => {
+    const mutateAsync = vi.fn().mockResolvedValue({ job_id: "job-1" });
+    const cancelMutate = vi.fn();
+    mockUseStartSearch.mockReturnValue({ mutateAsync, isPending: false });
+    mockUseCancelJob.mockReturnValue({ mutate: cancelMutate, isPending: false });
+    mockUseJob.mockReturnValue({
+      data: job({ status: "running", progress_pct: 30, step: "clustering", counts: null }),
+      isLoading: false,
+    });
+
+    const { rerender } = render(<SearchPage />);
+
+    fireEvent.change(screen.getByPlaceholderText("Search a book title or ISBN"), {
+      target: { value: "Atomic Habits" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Search" }));
+
+    const cancelButton = await screen.findByRole("button", { name: "Cancel" });
+    fireEvent.click(cancelButton);
+
+    expect(cancelMutate).toHaveBeenCalledTimes(1);
+
+    // Simulate the cancel mutation's onSuccess seeding the job cache with the
+    // cancelled row — useJob's next read reflects that terminal state, and
+    // JobStatus renders Cancelled instead of the spinner, with no dead end
+    // (the search form above is still present to search again).
+    mockUseJob.mockReturnValue({
+      data: job({ status: "error", error_detail: "cancelled" }),
+      isLoading: false,
+    });
+    rerender(<SearchPage />);
+
+    expect(screen.getByText("Cancelled")).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("Search a book title or ISBN")).toBeInTheDocument();
   });
 });

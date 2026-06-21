@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { useCandidates, useJob, useStartSweep } from "@/lib/hooks";
+import { useCancelJob, useCandidates, useJob, useStartSweep } from "@/lib/hooks";
 import type { CandidateOut, JobOut } from "@/lib/types";
 import CategorySweepPage from "./page";
 
@@ -8,6 +8,7 @@ vi.mock("@/lib/hooks", () => ({
   useCandidates: vi.fn(),
   useStartSweep: vi.fn(),
   useJob: vi.fn(),
+  useCancelJob: vi.fn(),
 }));
 
 vi.mock("next/navigation", () => ({
@@ -17,6 +18,7 @@ vi.mock("next/navigation", () => ({
 const mockUseCandidates = useCandidates as unknown as ReturnType<typeof vi.fn>;
 const mockUseStartSweep = useStartSweep as unknown as ReturnType<typeof vi.fn>;
 const mockUseJob = useJob as unknown as ReturnType<typeof vi.fn>;
+const mockUseCancelJob = useCancelJob as unknown as ReturnType<typeof vi.fn>;
 
 function candidate(overrides: Partial<CandidateOut> = {}): CandidateOut {
   return {
@@ -57,6 +59,8 @@ beforeEach(() => {
   mockUseStartSweep.mockReset();
   mockUseJob.mockReset();
   mockUseJob.mockReturnValue({ data: undefined, isLoading: false });
+  mockUseCancelJob.mockReset();
+  mockUseCancelJob.mockReturnValue({ mutate: vi.fn(), isPending: false });
 });
 
 describe("CategorySweepPage", () => {

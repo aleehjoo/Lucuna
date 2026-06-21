@@ -2,12 +2,21 @@
 
 import { FormEvent, useState } from "react";
 import { useParams } from "next/navigation";
+import { ApiError } from "@/lib/api";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { JobStatus } from "@/components/JobStatus";
 import { SearchResult } from "@/components/SearchResult";
 import { useStartSearch } from "@/lib/hooks";
 import type { JobOut, LiveSearchCounts } from "@/lib/types";
+
+// Backend maps a missing HARDCOVER_API_TOKEN to a 503 on POST /search
+// (api/routers/search.py) — that's a configuration fact about this instance,
+// not a failure of the search itself, so it gets its own quiet notice
+// (Frontend PRD §11 graceful degradation) rather than the oxblood "something
+// broke" treatment `submitError` otherwise renders.
+const HARDCOVER_UNAVAILABLE_MESSAGE =
+  "Live search isn't available — the Hardcover key isn't configured on this instance.";
 
 // Live single-title search — the most important surface in the product.
 // Resolves ONE title against Hardcover, live, in seconds (never the seeded
@@ -24,10 +33,12 @@ export default function SearchPage() {
   const [jobId, setJobId] = useState<string | null>(null);
   const [result, setResult] = useState<LiveSearchCounts | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [hardcoverUnavailable, setHardcoverUnavailable] = useState(false);
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setSubmitError(null);
+    setHardcoverUnavailable(false);
     setResult(null);
 
     const trimmed = query.trim();
@@ -46,6 +57,10 @@ export default function SearchPage() {
       );
       setJobId(job_id);
     } catch (err) {
+      if (err instanceof ApiError && err.status === 503) {
+        setHardcoverUnavailable(true);
+        return;
+      }
       setSubmitError(
         err instanceof Error ? err.message : "Couldn't start the search.",
       );
@@ -94,6 +109,19 @@ export default function SearchPage() {
         {submitError ? (
           <p className="mt-3 text-sm text-[var(--oxblood)]">{submitError}</p>
         ) : null}
+        {hardcoverUnavailable ? (
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-md border border-[var(--border)] bg-[color-mix(in_srgb,var(--ink)_4%,transparent)] px-3 py-2">
+            <p className="text-sm text-[var(--muted)]">
+              {HARDCOVER_UNAVAILABLE_MESSAGE}
+            </p>
+            <Button
+              variant="ghost"
+              onClick={() => setHardcoverUnavailable(false)}
+            >
+              Dismiss
+            </Button>
+          </div>
+        ) : null}
       </Card>
 
       {jobId ? (
@@ -103,6 +131,7 @@ export default function SearchPage() {
             variant="inline"
             onDone={handleDone}
             onRetry={handleRetry}
+            cancellable
           />
         </Card>
       ) : null}

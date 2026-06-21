@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { useJob, useProjectJobs, useStartSeed } from "@/lib/hooks";
+import { useCancelJob, useJob, useProjectJobs, useStartSeed } from "@/lib/hooks";
 import type { JobOut } from "@/lib/types";
 import SeedPage from "./page";
 
@@ -8,6 +8,7 @@ vi.mock("@/lib/hooks", () => ({
   useStartSeed: vi.fn(),
   useProjectJobs: vi.fn(),
   useJob: vi.fn(),
+  useCancelJob: vi.fn(),
 }));
 
 vi.mock("next/navigation", () => ({
@@ -17,6 +18,7 @@ vi.mock("next/navigation", () => ({
 const mockUseStartSeed = useStartSeed as unknown as ReturnType<typeof vi.fn>;
 const mockUseProjectJobs = useProjectJobs as unknown as ReturnType<typeof vi.fn>;
 const mockUseJob = useJob as unknown as ReturnType<typeof vi.fn>;
+const mockUseCancelJob = useCancelJob as unknown as ReturnType<typeof vi.fn>;
 
 function job(overrides: Partial<JobOut> = {}): JobOut {
   return {
@@ -46,6 +48,8 @@ beforeEach(() => {
     refetch: vi.fn(),
   });
   mockUseJob.mockReturnValue({ data: undefined, isLoading: false });
+  mockUseCancelJob.mockReset();
+  mockUseCancelJob.mockReturnValue({ mutate: vi.fn(), isPending: false });
 });
 
 describe("SeedPage", () => {

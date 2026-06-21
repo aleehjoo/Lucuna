@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { useJob } from "@/lib/hooks";
+import { useCancelJob, useJob } from "@/lib/hooks";
 import type { JobOut } from "@/lib/types";
 import { Button } from "@/components/ui/Button";
 
@@ -18,19 +18,30 @@ const STEP_FALLBACK: Record<"queued" | "running", string> = {
  * panel. `variant="bar"` is for long-running jobs (seed): a real progress bar
  * with `progress_pct` + `step`. `variant="inline"` is for fast jobs (search):
  * a lightweight spinner + step, no bar.
+ *
+ * `cancellable` (Frontend PRD §11) renders a "Cancel" affordance next to a
+ * queued/running job. JobStatus owns the cancel mutation itself — callers
+ * only need to set the prop — and on success seeds the job cache with the
+ * cancelled row, which flips this same component into its existing
+ * error_detail==='cancelled' → "Cancelled" branch below. No separate
+ * "stop polling" step: useJob's refetch interval already stops once the
+ * job's status is terminal.
  */
 export function JobStatus({
   jobId,
   onDone,
   onRetry,
   variant = "bar",
+  cancellable = false,
 }: {
   jobId: string | null;
   onDone?: (job: JobOut) => void;
   onRetry?: () => void;
   variant?: Variant;
+  cancellable?: boolean;
 }) {
   const { data: job, isLoading } = useJob(jobId);
+  const cancelJob = useCancelJob(jobId);
   const firedFor = useRef<string | null>(null);
 
   useEffect(() => {
@@ -97,6 +108,16 @@ export function JobStatus({
   // queued | running
   const step = job.step || STEP_FALLBACK[job.status];
   const pct = Math.max(0, Math.min(100, Math.round(job.progress_pct ?? 0)));
+  const cancelButton =
+    cancellable ? (
+      <Button
+        variant="ghost"
+        onClick={() => cancelJob.mutate()}
+        disabled={cancelJob.isPending}
+      >
+        {cancelJob.isPending ? "Cancelling…" : "Cancel"}
+      </Button>
+    ) : null;
 
   if (variant === "inline") {
     return (
@@ -113,6 +134,7 @@ export function JobStatus({
         >
           {pct}%
         </span>
+        {cancelButton}
       </StatusShell>
     );
   }
@@ -136,6 +158,7 @@ export function JobStatus({
           style={{ width: `${pct}%` }}
         />
       </div>
+      {cancelButton ? <div className="flex justify-end">{cancelButton}</div> : null}
     </div>
   );
 }

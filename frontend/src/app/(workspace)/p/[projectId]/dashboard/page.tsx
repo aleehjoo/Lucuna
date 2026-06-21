@@ -8,6 +8,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { FlagBadge } from "@/components/ui/FlagBadge";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { HypothesisBanner } from "@/components/HypothesisBanner";
 import { AspectFrequency } from "@/components/charts/AspectFrequency";
 import { DemandSupply } from "@/components/charts/DemandSupply";
 import { GapStrip } from "@/components/charts/GapStrip";
@@ -135,6 +136,7 @@ export default function DashboardPage() {
         <p className="text-sm text-[var(--muted)]">
           Browsing the seeded historical corpus for this niche.
         </p>
+        <HypothesisBanner />
       </div>
 
       {/* 1. Summary KPIs */}

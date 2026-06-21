@@ -9,6 +9,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { FlagBadge } from "@/components/ui/FlagBadge";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { HypothesisBanner } from "@/components/HypothesisBanner";
 import { JobStatus } from "@/components/JobStatus";
 import { DemandSupply } from "@/components/charts/DemandSupply";
 import { GapStrip } from "@/components/charts/GapStrip";
@@ -176,6 +177,7 @@ export default function CategorySweepPage() {
               {candidateList.length} candidate{candidateList.length === 1 ? "" : "s"}
             </span>
           </div>
+          <HypothesisBanner />
           <ol className="flex flex-col gap-3">
             {candidateList
               .slice()

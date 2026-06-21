@@ -86,12 +86,19 @@ describe("CategorySweepPage", () => {
     });
     mockUseStartSweep.mockReturnValue({ mutateAsync: vi.fn(), isPending: false });
 
-    render(<CategorySweepPage />);
+    const { container } = render(<CategorySweepPage />);
 
-    const titles = screen.getAllByText(/Higher Gap|Lower Gap/).map((el) => el.textContent);
+    // Scoped to the ranked <ol> itself — GapStrip/DemandSupply below it
+    // also render each candidate's title (accessible row list + axis
+    // ticks), which is real, intentional duplication, not a bug to assert
+    // against here.
+    const rankedList = container.querySelector("ol") as HTMLElement;
+    const titles = within(rankedList)
+      .getAllByText(/Higher Gap|Lower Gap/)
+      .map((el) => el.textContent);
     expect(titles).toEqual(["Higher Gap", "Lower Gap"]);
-    expect(screen.getByText("0.90")).toBeInTheDocument();
-    expect(screen.getByText("0.30")).toBeInTheDocument();
+    expect(within(rankedList).getByText("0.90")).toBeInTheDocument();
+    expect(within(rankedList).getByText("0.30")).toBeInTheDocument();
   });
 
   it("expanding a row reveals its flags, platforms, and component figures", () => {
@@ -118,7 +125,20 @@ describe("CategorySweepPage", () => {
     expect(screen.getByText("Incomplete")).toBeInTheDocument();
     expect(screen.getByText("Blind spot")).toBeInTheDocument();
 
-    const row = screen.getByText("Thin Signal Niche").closest("li") as HTMLElement;
+    // "Thin Signal Niche" also appears in GapStrip/DemandSupply's accessible
+    // row lists below the ranked list — real, intentional duplication of
+    // the same data, not a bug. The candidate row itself is always the
+    // first match (it renders first, inside the ranked <ol>).
+    // "Thin Signal Niche" also appears in GapStrip/DemandSupply's accessible
+    // row lists below the ranked list, and Recharts appends a hidden, reused
+    // `recharts_measurement_span` directly to `document.body` for text-width
+    // measurement (a singleton that can hold a previous render's text) — so
+    // find the actual candidate row by its `<li>` ancestor rather than
+    // assuming array order.
+    const row = screen
+      .getAllByText("Thin Signal Niche")
+      .map((el) => el.closest("li"))
+      .find((li): li is HTMLLIElement => li !== null) as HTMLElement;
     const toggle = within(row).getByRole("button");
     expect(toggle).toHaveAttribute("aria-expanded", "false");
 
@@ -149,9 +169,15 @@ describe("CategorySweepPage", () => {
 
     render(<CategorySweepPage />);
 
-    expect(screen.getByText("Category Gap")).toBeInTheDocument();
+    // "Category Gap" also appears in GapStrip/DemandSupply's accessible row
+    // lists below the ranked list — real, intentional duplication of the
+    // same (already bisac-filtered) data, not a bug.
+    expect(screen.getAllByText("Category Gap").length).toBeGreaterThan(0);
     expect(screen.queryByText("Per-Work Gap")).not.toBeInTheDocument();
-    expect(screen.getByText("1 candidate")).toBeInTheDocument();
+    // "1 candidate" also appears as GapStrip's own provenance label below
+    // the ranked list — both are real, intentional renderings of the same
+    // (already bisac-filtered) count.
+    expect(screen.getAllByText("1 candidate").length).toBeGreaterThan(0);
   });
 
   it("renders an empty state with no candidates", () => {

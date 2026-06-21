@@ -5,6 +5,10 @@ import { Card } from "@/components/ui/Card";
 import { Chip } from "@/components/ui/Chip";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { FlagBadge } from "@/components/ui/FlagBadge";
+import { AgreementGauge } from "@/components/charts/AgreementGauge";
+import { AspectFrequency } from "@/components/charts/AspectFrequency";
+import { ProvenanceChips } from "@/components/charts/ProvenanceChips";
+import { RatingHistogram } from "@/components/charts/RatingHistogram";
 import type { LiveSearchCounts, RatingDistribution } from "@/lib/types";
 
 // THE DESIGN CONSTRAINT (product owner, non-negotiable): live single-title
@@ -61,6 +65,13 @@ export function SearchResult({ counts }: { counts: LiveSearchCounts }) {
           distribution={counts.rating_distribution}
           total={counts.rating_count}
         />
+        {/* Recharts histogram — augments the plain mono bars above (kept for
+            the at-a-glance figure); renders its own honest empty state when
+            rating_count is 0, so no extra gating needed here. */}
+        <RatingHistogram
+          distribution={counts.rating_distribution}
+          total={counts.rating_count}
+        />
       </Card>
 
       {/* 2. Resolved title + provenance + sample/confidence summary — always
@@ -104,6 +115,16 @@ export function SearchResult({ counts }: { counts: LiveSearchCounts }) {
             <FlagBadge flag="recent_supply_surge" />
           ) : null}
         </div>
+
+        {/* Provenance chips — n, platforms, and (when available) the
+            oldest/newest signal date range, per §7's "never imply more
+            certainty than the sample supports". */}
+        <ProvenanceChips
+          sampleSize={sampleSize}
+          platforms={platforms}
+          oldestSignal={candidate?.validity.oldest_signal}
+          newestSignal={candidate?.validity.newest_signal}
+        />
       </Card>
 
       {/* 5. Clusters — a BONUS section. Never the spine of the result: when
@@ -149,6 +170,15 @@ export function SearchResult({ counts }: { counts: LiveSearchCounts }) {
               </li>
             ))}
           </ul>
+
+          {/* Recharts visualizations — augment the textual list above (kept
+              for the per-cluster platform/cross-platform chips), not a
+              replacement for it. */}
+          <AgreementGauge
+            agreementPct={counts.agreement_pct}
+            sampleSize={counts.review_count}
+          />
+          <AspectFrequency clusters={counts.clusters} />
         </Card>
       ) : (
         <div className="flex items-center gap-3 rounded-lg border border-[var(--border)] px-4 py-3">

@@ -160,9 +160,13 @@ describe("DashboardPage", () => {
     expect(screen.getByText("The Pragmatic Programmer")).toBeInTheDocument();
     expect(screen.getByText("Robert C. Martin")).toBeInTheDocument();
 
-    // Clusters (3 distinct labels, > 2 clusters -> not low signal)
-    expect(screen.getByText("Outdated examples")).toBeInTheDocument();
-    expect(screen.getByText("Missing exercises")).toBeInTheDocument();
+    // Clusters (3 distinct labels, > 2 clusters -> not low signal). Each
+    // label appears in both the plain textual list and the AspectFrequency
+    // chart's accessible row list beneath it — both are real, intentional
+    // renderings of the same data, so assert presence rather than a single
+    // exact match.
+    expect(screen.getAllByText("Outdated examples").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Missing exercises").length).toBeGreaterThan(0);
     expect(screen.queryByText("Low signal")).not.toBeInTheDocument();
 
     // Candidates

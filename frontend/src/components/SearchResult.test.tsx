@@ -117,12 +117,16 @@ describe("SearchResult", () => {
       ratingFigure.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
 
-    // Provenance: platform + fresh-only framing.
-    expect(screen.getByText("hardcover")).toBeInTheDocument();
+    // Provenance: platform + fresh-only framing. "hardcover" appears twice
+    // (the plain platform chip + the ProvenanceChips strip beneath it, which
+    // carries the same platform plus n= and date-range — both are real,
+    // intentional provenance surfaces, not a duplicate bug).
+    expect(screen.getAllByText("hardcover").length).toBeGreaterThan(0);
     expect(
       screen.getByText("No historical depth — live Hardcover only."),
     ).toBeInTheDocument();
     expect(screen.getByText("Fresh only")).toBeInTheDocument();
+    expect(screen.getAllByText("n=13").length).toBeGreaterThan(0);
 
     // Honest low-signal note replaces the cluster section — not a blank
     // panel, not a "no results" dead end, and not styled as a failure.
@@ -150,11 +154,18 @@ describe("SearchResult", () => {
       screen.getByText("Historical seeded corpus + live Hardcover, merged."),
     ).toBeInTheDocument();
 
+    // The cluster label/count appear in both the plain textual list and the
+    // AspectFrequency chart's accessible row list / axis ticks beneath it —
+    // both are real, intentional renderings of the same data, not a
+    // duplicate bug, so assert presence (getAllByText) rather than a single
+    // exact match.
     expect(screen.getByText("Complaint clusters")).toBeInTheDocument();
-    expect(screen.getByText("pacing drags in the middle chapters")).toBeInTheDocument();
-    expect(screen.getByText("18 reviewers")).toBeInTheDocument();
-    expect(screen.getByText("examples feel dated")).toBeInTheDocument();
-    expect(screen.getByText("cross-platform")).toBeInTheDocument();
+    expect(
+      screen.getAllByText("pacing drags in the middle chapters").length,
+    ).toBeGreaterThan(0);
+    expect(screen.getAllByText("18 reviewers").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("examples feel dated").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("cross-platform").length).toBeGreaterThan(0);
 
     // No low-signal note when clusters exist.
     expect(screen.queryByText("Low signal")).not.toBeInTheDocument();

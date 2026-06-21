@@ -8,14 +8,20 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { FlagBadge } from "@/components/ui/FlagBadge";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { AspectFrequency } from "@/components/charts/AspectFrequency";
+import { DemandSupply } from "@/components/charts/DemandSupply";
+import { GapStrip } from "@/components/charts/GapStrip";
+import { ProvenanceChips } from "@/components/charts/ProvenanceChips";
 import { useCandidates, useClusters, useProject, useWorks } from "@/lib/hooks";
 import type { CandidateOut, ClusterOut, WorkOut } from "@/lib/types";
 
 // Niche Dashboard — the operator's browse surface for an already-seeded
 // project (Frontend PRD §6.4 / Plan B Task 9). Pulls four independent reads
 // (project, works, niche-level clusters, candidates) and renders them as
-// plain lists/tables — NO charts here; the gold-leaf Gap-Strip and other
-// Recharts visualizations are W7 (per the task brief).
+// plain lists/tables, AUGMENTED by the W7 Recharts visualizations
+// (AspectFrequency, GapStrip, DemandSupply, ProvenanceChips) below each
+// list — the lists remain the spine; charts add a visual read, not a
+// replacement.
 //
 // Two states this page must never produce: a dead end (an unseeded project
 // renders an EmptyState with a path forward, not a blank dashboard) and a
@@ -193,6 +199,10 @@ export default function DashboardPage() {
                 <ClusterRow key={cluster.id} cluster={cluster} />
               ))}
             </ul>
+            {/* Chart augments the list above — only rendered once there's
+                content, since the list's own "no clusters yet" message
+                already covers the empty case. */}
+            <AspectFrequency clusters={clusterList} title="Niche complaint frequency" />
           </>
         )}
       </Card>
@@ -205,11 +215,21 @@ export default function DashboardPage() {
             No gap candidates scored yet &mdash; run a sweep to surface them.
           </p>
         ) : (
-          <ol className="flex flex-col gap-3">
-            {candidateList.map((c, i) => (
-              <CandidateRow key={`${c.scope}-${c.ref_id}`} candidate={c} rank={i + 1} />
-            ))}
-          </ol>
+          <>
+            <ol className="flex flex-col gap-3">
+              {candidateList.map((c, i) => (
+                <CandidateRow key={`${c.scope}-${c.ref_id}`} candidate={c} rank={i + 1} />
+              ))}
+            </ol>
+            {/* Charts augment the list above — work-scope candidates already
+                filtered into candidateList for this Dashboard. */}
+            <GapStrip candidates={candidateList} />
+            <DemandSupply candidates={candidateList} />
+            <ProvenanceChips
+              sampleSize={candidateList.reduce((sum, c) => sum + c.sample_size, 0)}
+              platforms={Array.from(new Set(candidateList.flatMap((c) => c.platforms_used)))}
+            />
+          </>
         )}
       </Card>
     </div>

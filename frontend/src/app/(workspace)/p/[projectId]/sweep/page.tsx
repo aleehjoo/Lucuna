@@ -10,6 +10,8 @@ import { ErrorState } from "@/components/ui/ErrorState";
 import { FlagBadge } from "@/components/ui/FlagBadge";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { JobStatus } from "@/components/JobStatus";
+import { DemandSupply } from "@/components/charts/DemandSupply";
+import { GapStrip } from "@/components/charts/GapStrip";
 import { useCandidates, useStartSweep } from "@/lib/hooks";
 import type { CandidateOut, JobOut } from "@/lib/types";
 
@@ -22,11 +24,12 @@ const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000";
 // by gap_score. It is explicitly an advanced/operator view — surfaced with a
 // quiet banner, not hidden, but not styled as the product's front door.
 //
-// NO charts here: the gold-leaf Gap-Strip and other Recharts visualizations
-// are W7 (per the task brief). Rankings render as an expandable list with
-// mono figures — same honesty rule as SearchResult/Dashboard: a candidate's
-// confidence/incomplete/blind_spot flags are always visible, never smoothed
-// over to make a thin result look stronger than it is.
+// Rankings render as an expandable list with mono figures (the spine of this
+// surface), AUGMENTED by the W7 GapStrip + DemandSupply Recharts
+// visualizations below the list — same honesty rule as
+// SearchResult/Dashboard: a candidate's confidence/incomplete/blind_spot
+// flags are always visible, never smoothed over to make a thin result look
+// stronger than it is.
 export default function CategorySweepPage() {
   const params = useParams<{ projectId: string }>();
   const projectId = params.projectId;
@@ -181,6 +184,10 @@ export default function CategorySweepPage() {
                 <CandidateRow key={`${c.scope}-${c.ref_id}`} candidate={c} rank={i + 1} />
               ))}
           </ol>
+          {/* Charts augment the ranked list above — bisac-scope candidates
+              already filtered into candidateList for this surface. */}
+          <GapStrip candidates={candidateList} />
+          <DemandSupply candidates={candidateList} />
         </Card>
       )}
 

@@ -115,11 +115,14 @@ export interface LiveSearchClusterOut {
 }
 
 export interface LiveSearchCounts {
+  title: string;
   review_count: number;
   fresh_only: boolean;
   agreement_pct: number;
   clusters: LiveSearchClusterOut[];
   pack: ContextPack;
+  /** Only present (true) when Hardcover couldn't resolve the title/ISBN at all. */
+  not_found?: boolean;
 }
 
 // ---------------------------------------------------------------------------

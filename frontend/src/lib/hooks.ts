@@ -88,6 +88,19 @@ export function useJob(jobId: string | null) {
   });
 }
 
+// Recent jobs for a project (GET /projects/{id}/jobs) — backs the Seed &
+// Data operator surface's "in-flight job on mount" auto-resume and its past-
+// jobs history (Plan B Task 11). Not polled by default: the page composes
+// this with useJob (which IS polled, keyed by job id) once it has picked out
+// the running/queued job to track, so this list only needs to be fresh on
+// mount/refetch, not on every tick.
+export const useProjectJobs = (id: string | null) =>
+  useQuery({
+    queryKey: ["jobs", id] as const,
+    enabled: !!id,
+    queryFn: () => api.get<JobOut[]>(`/projects/${id}/jobs`),
+  });
+
 export function useStartSearch(projectId: string) {
   return useMutation({
     mutationFn: (body: SearchRequestBody) =>

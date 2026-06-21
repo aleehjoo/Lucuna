@@ -106,7 +106,10 @@ export default function DashboardPage() {
   }
 
   const clusterList = clusters.data ?? [];
-  const candidateList = candidates.data ?? [];
+  // GET /candidates returns BOTH work- and bisac-scope rows; the Dashboard's
+  // "Gap candidates" card is per-work (the BISAC-wide view lives on Category
+  // Sweep), so only work-scope candidates belong here.
+  const candidateList = (candidates.data ?? []).filter((c) => c.scope === "work");
   const totalReviews = workList.reduce((sum, w) => sum + (w.review_count ?? 0), 0);
 
   // Honesty gate mirroring SearchResult: a handful of clusters, or every

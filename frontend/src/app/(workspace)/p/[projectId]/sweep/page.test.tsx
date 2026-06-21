@@ -135,6 +135,25 @@ describe("CategorySweepPage", () => {
     expect(within(row).getByText(/Low confidence/)).toBeInTheDocument();
   });
 
+  it("shows only bisac-scope candidates when the list has both scopes", () => {
+    mockUseCandidates.mockReturnValue({
+      data: [
+        candidate({ scope: "work", ref_id: "work-1", title: "Per-Work Gap", gap_score: 0.5 }),
+        candidate({ scope: "bisac", ref_id: "COM051000", title: "Category Gap", gap_score: 0.9 }),
+      ],
+      isLoading: false,
+      isError: false,
+      refetch: vi.fn(),
+    });
+    mockUseStartSweep.mockReturnValue({ mutateAsync: vi.fn(), isPending: false });
+
+    render(<CategorySweepPage />);
+
+    expect(screen.getByText("Category Gap")).toBeInTheDocument();
+    expect(screen.queryByText("Per-Work Gap")).not.toBeInTheDocument();
+    expect(screen.getByText("1 candidate")).toBeInTheDocument();
+  });
+
   it("renders an empty state with no candidates", () => {
     mockUseCandidates.mockReturnValue({
       data: [],

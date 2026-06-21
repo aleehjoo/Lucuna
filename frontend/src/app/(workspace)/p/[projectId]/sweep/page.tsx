@@ -89,7 +89,10 @@ export default function CategorySweepPage() {
     }
   }
 
-  const candidateList = candidates.data ?? [];
+  // GET /candidates returns BOTH work- and bisac-scope rows; this surface
+  // frames itself as BISAC-wide (category sweep), so only bisac-scope
+  // candidates belong here. Per-work gaps surface on the Niche Dashboard.
+  const candidateList = (candidates.data ?? []).filter((c) => c.scope === "bisac");
   const sweepRunning = !!jobId;
 
   return (

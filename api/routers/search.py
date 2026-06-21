@@ -86,7 +86,8 @@ async def start_search(project_id: uuid.UUID, body: SearchRequest,
         result = await run_in_threadpool(_run)
         await jobs_svc.update_job(
             sm, job_id, status="done", progress_pct=100,
-            counts={"review_count": result["review_count"], "fresh_only": result["fresh_only"],
+            counts={"title": result["title"], "not_found": result.get("not_found", False),
+                    "review_count": result["review_count"], "fresh_only": result["fresh_only"],
                     "agreement_pct": result["agreement_pct"], "clusters": result["clusters"],
                     "rating_avg": result["rating_avg"], "rating_count": result["rating_count"],
                     "rating_distribution": result["rating_distribution"],

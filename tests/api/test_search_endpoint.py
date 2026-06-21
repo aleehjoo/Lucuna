@@ -1,3 +1,4 @@
+import asyncio
 import os
 import uuid
 
@@ -37,6 +38,20 @@ async def test_search_creates_job_and_runs_live(client, monkeypatch):
     # job should resolve to done with the live result (search is seconds)
     job = (await client.get(f"/jobs/{job_id}")).json()
     assert job["status"] in ("running", "done")
+
+    # Poll until done: the router's counts dict must carry `title` (the
+    # SearchResult heading) and `not_found` (drives the unresolved-title
+    # EmptyState) straight through from analyze_live()'s result — regression
+    # test for the bug where the router hand-listed keys and dropped both.
+    for _ in range(50):
+        job = (await client.get(f"/jobs/{job_id}")).json()
+        if job["status"] == "done":
+            break
+        await asyncio.sleep(0.1)
+    assert job["status"] == "done"
+    assert job["counts"]["title"] == "Mocked"
+    assert "not_found" in job["counts"]
+    assert job["counts"]["not_found"] is False
 
 
 async def test_search_requires_title_or_isbn(client, monkeypatch):

@@ -170,6 +170,24 @@ describe("DashboardPage", () => {
     expect(screen.getByText("0.72")).toBeInTheDocument();
   });
 
+  it("shows only work-scope candidates in the Gap candidates card when the list has both scopes", () => {
+    setMocks({
+      project: project(),
+      works: [work()],
+      clusters: [cluster(), cluster({ id: "c2", label: "Missing exercises" }), cluster({ id: "c3", label: "Pacing issues" })],
+      candidates: [
+        candidate({ scope: "work", ref_id: "work-1", title: "Clean Code", gap_score: 0.72 }),
+        candidate({ scope: "bisac", ref_id: "COM051000", title: "COM051000 — niche complaint clusters", gap_score: 0.91 }),
+      ],
+    });
+
+    render(<DashboardPage />);
+
+    expect(screen.getByText("0.72")).toBeInTheDocument();
+    expect(screen.queryByText("COM051000 — niche complaint clusters")).not.toBeInTheDocument();
+    expect(screen.queryByText("0.91")).not.toBeInTheDocument();
+  });
+
   it("renders the empty state when the project is not seeded", () => {
     setMocks({
       project: project({ seeded: false, work_count: 0 }),

@@ -12,6 +12,7 @@ import type {
   HealthOut,
   JobIdResponse,
   JobOut,
+  ProjectCreateBody,
   ProjectOut,
   SearchRequestBody,
   SeedRequestBody,
@@ -64,6 +65,17 @@ export const useProject = (id: string | null) =>
     enabled: !!id,
     queryFn: () => api.get<ProjectOut>(`/projects/${id}`),
   });
+
+// Creating a project does NOT seed it — seeding is a separate, explicit
+// operator action on the Seed & Data surface (Frontend PRD §6.2).
+export function useCreateProject() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: ProjectCreateBody) =>
+      api.post<ProjectOut>("/projects", body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["projects"] }),
+  });
+}
 
 export function useJob(jobId: string | null) {
   return useQuery({

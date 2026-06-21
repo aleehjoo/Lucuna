@@ -199,6 +199,14 @@ export interface SeedRequestBody {
   max_works: number;
 }
 
+/** POST /projects body (api/schemas.py: ProjectCreate). */
+export interface ProjectCreateBody {
+  name: string;
+  target_bisac: string[];
+  subject_filter: Record<string, unknown>;
+  config: Record<string, unknown>;
+}
+
 export interface JobIdResponse {
   job_id: string;
 }
